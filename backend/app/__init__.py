@@ -24,9 +24,11 @@ def register_blueprints(app: Flask) -> None:
     from app.blueprints.admin import admin_bp
     from app.blueprints.application import application_bp
     from app.blueprints.auth import auth_bp
+    from app.blueprints.payment import payment_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(application_bp, url_prefix="/api")
+    app.register_blueprint(payment_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
 
