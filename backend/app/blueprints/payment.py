@@ -66,10 +66,17 @@ def create_payment_order():
     if application.status == "PAID":
         return jsonify({"success": False, "error": "This application has already been paid for"}), 400
 
-    order = payment_service.create_order(
-        amount_paise=APPLICATION_FEE_PAISE,
-        receipt=f"admitflow-{application.id}",
-    )
+    # Razorpay is an external service — a bad key, network blip, or Razorpay-side outage
+    # must not crash the request with a raw 500. It's logged and reported cleanly instead,
+    # consistent with every other endpoint's {success, error} envelope (SRD NFR-4).
+    try:
+        order = payment_service.create_order(
+            amount_paise=APPLICATION_FEE_PAISE,
+            receipt=f"admitflow-{application.id}",
+        )
+    except Exception:
+        current_app.logger.exception("Razorpay order creation failed for application %s", application.id)
+        return jsonify({"success": False, "error": "Payment gateway unavailable. Try again shortly."}), 502
 
     payment = Payment(
         application_id=application.id,

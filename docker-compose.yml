@@ -1,0 +1,36 @@
+# Local dev database + object storage for the whole team. Ports are chosen to avoid
+# clashing with any natively-installed PostgreSQL (which commonly sits on 5432-5434).
+# Run: docker compose up -d
+# Then point .env at postgresql://admitflow:admitflow_dev_password@localhost:5435/admitflow
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: admitflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admitflow
+      POSTGRES_PASSWORD: admitflow_dev_password
+      POSTGRES_DB: admitflow
+    ports:
+      - "5435:5432"
+    volumes:
+      - admitflow_postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: admitflow_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: admitflow
+      MINIO_ROOT_PASSWORD: admitflow_dev_password
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - admitflow_minio_data:/data
+
+volumes:
+  admitflow_postgres_data:
+  admitflow_minio_data:

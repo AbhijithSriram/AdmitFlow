@@ -10,6 +10,7 @@ Flask-Bcrypt==1.0.1
 python-dotenv==1.0.1
 minio==7.2.8
 razorpay==1.4.2
+setuptools==75.6.0  # provides pkg_resources, which the razorpay SDK imports but doesn't declare as a dependency
 Pillow==10.4.0
 WeasyPrint==62.3
 gunicorn==23.0.0
