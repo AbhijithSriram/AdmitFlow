@@ -10,6 +10,10 @@ def create_app(config_name: str | None = None) -> Flask:
 
     db.init_app(app)
     bcrypt.init_app(app)
+    # Flask-Session's SQLAlchemy backend creates its own SQLAlchemy instance unless
+    # told to reuse an existing one — without this line it collides with `db` above
+    # ("A 'SQLAlchemy' instance has already been registered on this Flask app").
+    app.config["SESSION_SQLALCHEMY"] = db
     session.init_app(app)
     limiter.init_app(app)
     cors.init_app(app, supports_credentials=True, origins=app.config["CORS_ORIGINS"])

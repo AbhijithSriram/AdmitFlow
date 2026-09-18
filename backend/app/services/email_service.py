@@ -1,3 +1,4 @@
+import html
 import smtplib
 from email.message import EmailMessage
 
@@ -30,11 +31,25 @@ def send_password_reset_email(to_address: str, otp: str) -> None:
     _send(to_address, "AdmitFlow password reset", f"<p>Your password reset OTP is <b>{otp}</b>.</p>")
 
 
-def send_payment_confirmation_email(to_address: str, pdf_bytes: bytes, receipt_bytes: bytes) -> None:
+def send_payment_confirmation_email(
+    to_address: str, pdf_bytes: bytes, receipt_bytes: bytes, context: dict | None = None
+) -> None:
+    context = context or {}
+    name = html.escape(str(context.get("full_name") or "Applicant"))
+    programme = context.get("programme")
+    programme_line = f" for <b>{html.escape(str(programme))}</b>" if programme else ""
+
+    body = (
+        f"<p>Dear {name},</p>"
+        f"<p>Your AdmitFlow application{programme_line} has been received and your payment "
+        "has been confirmed.</p>"
+        "<p>Your completed application and payment receipt are attached to this email.</p>"
+    )
+
     _send(
         to_address,
         "AdmitFlow application confirmed",
-        "<p>Your application and payment have been confirmed. See attachments.</p>",
+        body,
         attachments=[
             ("application.pdf", pdf_bytes, "pdf"),
             ("receipt.pdf", receipt_bytes, "pdf"),

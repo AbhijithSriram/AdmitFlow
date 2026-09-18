@@ -4,10 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>AdmitFlow</title>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Loads window.Razorpay, used by src/hooks/usePayment.js to open the checkout modal -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
