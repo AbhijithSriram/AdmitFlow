@@ -2,7 +2,8 @@ import axios from 'axios'
 
 // Centralised API client (NFR-5): every frontend HTTP call goes through this instance.
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
+  // `??` (not `||`) so an EMPTY VITE_API_BASE_URL in production means "same origin" (Nginx serves both).
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000',
   withCredentials: true,
 })
 
@@ -37,7 +38,10 @@ export const applicationApi = {
 export const adminApi = {
   login: (payload) => apiClient.post('/api/admin/login', payload),
   logout: () => apiClient.post('/api/admin/logout'),
+  me: () => apiClient.get('/api/admin/me'),
   listStudents: (params) => apiClient.get('/api/admin/students', { params }),
   getStudent: (studentId) => apiClient.get(`/api/admin/students/${studentId}`),
-  deleteStudent: (studentId) => apiClient.delete(`/api/admin/students/${studentId}`),
+  // The server re-checks that `confirmation` is exactly "DELETE".
+  deleteStudent: (studentId, confirmation) =>
+    apiClient.delete(`/api/admin/students/${studentId}`, { data: { confirmation } }),
 }

@@ -1,4 +1,4 @@
-from app.models.admin import Admin
+from app.models.admin import Admin, AdminSession
 from app.models.application import Application
 from app.models.audit_log import AuditLog
 from app.models.form_draft import FormDraft
@@ -11,6 +11,7 @@ from app.models.test_submission import TestSubmission
 
 __all__ = [
     "Admin",
+    "AdminSession",
     "Application",
     "AuditLog",
     "FormDraft",

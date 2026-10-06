@@ -1,0 +1,19 @@
+# Install:  sudo cp backend/deploy/minio.service /etc/systemd/system/ && sudo systemctl enable --now minio
+# Create /etc/default/minio (chmod 600) containing MINIO_ROOT_USER=... and MINIO_ROOT_PASSWORD=...
+# (the same values as MINIO_ACCESS_KEY / MINIO_SECRET_KEY in .env). Bound to localhost only.
+[Unit]
+Description=MinIO object storage (AdmitFlow)
+After=network.target
+
+[Service]
+User=minio-user
+Group=minio-user
+EnvironmentFile=/etc/default/minio
+ExecStart=/usr/local/bin/minio server /var/lib/minio --address 127.0.0.1:9000 --console-address 127.0.0.1:9001
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
