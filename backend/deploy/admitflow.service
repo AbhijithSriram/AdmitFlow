@@ -1,0 +1,23 @@
+# Install:  sudo cp backend/deploy/admitflow.service /etc/systemd/system/
+#           sudo systemctl daemon-reload && sudo systemctl enable --now admitflow
+# Assumes the repo is at /var/www/admitflow (matches nginx/nginx.conf), a venv at backend/venv,
+# and the real .env at the repo root (run.py's load_dotenv() finds it).
+[Unit]
+Description=AdmitFlow Flask API (Gunicorn)
+After=network.target postgresql.service minio.service
+Wants=postgresql.service minio.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/admitflow/backend
+Environment=FLASK_ENV=production
+ExecStart=/var/www/admitflow/backend/venv/bin/gunicorn -c deploy/gunicorn.conf.py run:app
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
