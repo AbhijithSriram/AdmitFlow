@@ -7,8 +7,15 @@ export function usePayment() {
 
   const pay = useCallback(async () => {
     setStatus('creating')
-    const { data } = await applicationApi.createPaymentOrder()
-    const order = data.data
+    let order
+    try {
+      const { data } = await applicationApi.createPaymentOrder()
+      order = data.data
+    } catch (error) {
+      // e.g. the payment gateway is unreachable: don't leave the button stuck on "Processing…"
+      setStatus('failed')
+      throw error
+    }
 
     return new Promise((resolve, reject) => {
       const options = {
@@ -16,6 +23,7 @@ export function usePayment() {
         amount: order.amount,
         currency: order.currency,
         order_id: order.id,
+        prefill: order.prefill,
         handler: async (response) => {
           setStatus('processing')
           try {

@@ -44,9 +44,20 @@ def _flatten(data, prefix: str = ""):
     return rows
 
 
+_WORDS = {
+    "ews": "EWS", "ug": "UG", "id": "ID", "cgpa": "CGPA",
+    "comm": "Communication", "perm": "Permanent", "line1": "line 1", "line2": "line 2",
+}
+
+
 def _humanize(label: str) -> str:
-    """'father_name' -> 'Father name', 'address / line_1' -> 'Address / Line 1'."""
-    return " / ".join(part.replace("_", " ").strip().capitalize() for part in str(label).split(" / "))
+    """'father_name' -> 'Father name', 'comm_line1' -> 'Communication line 1', 'ews' -> 'EWS'."""
+    parts = []
+    for part in str(label).split(" / "):
+        words = [_WORDS.get(word.lower(), word) for word in part.replace("_", " ").split()]
+        text = " ".join(words)
+        parts.append(text[:1].upper() + text[1:])
+    return " / ".join(parts)
 
 
 def _rows_html(data: dict) -> str:

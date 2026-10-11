@@ -45,11 +45,14 @@ def _collect_form_data(application_id: str) -> dict:
     and 5, `state` in Steps 1 and 2), and merging would silently overwrite one with the
     other. Still generic about the fields themselves, which belong to Person 2's steps."""
     drafts = FormDraft.query.filter_by(application_id=application_id).order_by(FormDraft.step_number).all()
-    return {
-        STEP_TITLES.get(draft.step_number, f"Step {draft.step_number}"): draft.data
-        for draft in drafts
-        if draft.data
-    }
+    sections = {}
+    for draft in drafts:
+        # `*_url` entries are internal storage keys (applications/<id>/photo.png), not
+        # something an applicant should see printed on their application.
+        fields = {key: value for key, value in (draft.data or {}).items() if not key.endswith("_url")}
+        if fields:
+            sections[STEP_TITLES.get(draft.step_number, f"Step {draft.step_number}")] = fields
+    return sections
 
 
 @payment_bp.route("/student/dashboard", methods=["GET"])
@@ -77,7 +80,7 @@ def dashboard():
 @login_required
 def create_payment_order():
     """Create a Razorpay order and return the order ID."""
-    _, application = _current_student_and_application()
+    student, application = _current_student_and_application()
 
     if application is None:
         return jsonify({"success": False, "error": "Start your application before paying"}), 400
@@ -109,7 +112,13 @@ def create_payment_order():
         jsonify(
             {
                 "success": True,
-                "data": {"id": order["id"], "amount": order["amount"], "currency": order["currency"]},
+                "data": {
+                    "id": order["id"],
+                    "amount": order["amount"],
+                    "currency": order["currency"],
+                    # Lets the checkout pre-fill these instead of asking the student again.
+                    "prefill": {"name": student.full_name, "email": student.email, "contact": student.phone},
+                },
             }
         ),
         201,

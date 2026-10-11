@@ -175,6 +175,8 @@ export default function FormStep7({ onBack }) {
 function flatten(data, prefix = '') {
   const rows = {}
   for (const [key, value] of Object.entries(data ?? {})) {
+    // `*_url` entries are internal storage keys (applications/<id>/photo.png), not for students.
+    if (key.endsWith('_url')) continue
     const label = prefix ? `${prefix} / ${key}` : key
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       Object.assign(rows, flatten(value, label))
@@ -185,13 +187,23 @@ function flatten(data, prefix = '') {
   return rows
 }
 
-// 'father_name' -> 'Father name'
+const WORDS = {
+  ews: 'EWS', ug: 'UG', id: 'ID', cgpa: 'CGPA',
+  comm: 'Communication', perm: 'Permanent', line1: 'line 1', line2: 'line 2',
+}
+
+// 'father_name' -> 'Father name', 'comm_line1' -> 'Communication line 1', 'ews' -> 'EWS'
 function humanize(label) {
   return label
     .split(' / ')
     .map((part) => {
-      const spaced = part.replace(/_/g, ' ').trim()
-      return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+      const text = part
+        .replace(/_/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((word) => WORDS[word.toLowerCase()] ?? word)
+        .join(' ')
+      return text.charAt(0).toUpperCase() + text.slice(1)
     })
     .join(' / ')
 }

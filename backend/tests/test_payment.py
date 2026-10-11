@@ -94,7 +94,10 @@ def test_create_order_records_a_created_payment(client, make_student, monkeypatc
     resp = client.post("/api/app/payment/create-order")
 
     assert resp.status_code == 201
-    assert resp.get_json()["data"] == {"id": "order_1", "amount": 100000, "currency": "INR"}
+    data = resp.get_json()["data"]
+    assert (data["id"], data["amount"], data["currency"]) == ("order_1", 100000, "INR")
+    # the checkout pre-fills these so the student isn't asked for them again
+    assert data["prefill"] == {"name": student.full_name, "email": student.email, "contact": student.phone}
     payment = Payment.query.filter_by(razorpay_order_id="order_1").one()
     assert payment.status == "CREATED"
     assert float(payment.amount) == 1000.0
@@ -284,3 +287,32 @@ def test_unpaid_application_can_still_be_edited(client, make_student):
     resp = client.patch(f"/api/app/draft/{application.id}/step/1", json={"father_name": "Updated"})
 
     assert resp.status_code == 200
+
+
+def test_internal_storage_keys_are_not_printed_on_the_application(client, make_student):
+    from app.blueprints.payment import _collect_form_data
+
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    FormDraft.query.filter_by(application_id=application.id).delete()
+    db.session.add(FormDraft(application_id=application.id, step_number=6, data={
+        "id_proof_type": "Aadhaar",
+        "photo_url": "applications/abc/photo.png",
+        "signature_url": "applications/abc/signature.png",
+        "id_proof_url": "applications/abc/id_proof.pdf",
+    }))
+    db.session.commit()
+
+    assert _collect_form_data(application.id) == {"Documents": {"id_proof_type": "Aadhaar"}}
+
+
+def test_pdf_labels_expand_abbreviations():
+    from app.services import pdf_service
+
+    html = pdf_service._rows_html({"Address Details": {"comm_line1": "x", "perm_pincode": "600001"},
+                                   "Personal Details": {"ews": "No"},
+                                   "Academic Details": {"ug_degree": "B.E."},
+                                   "Documents": {"id_proof_type": "Aadhaar"}})
+
+    for label in ("Communication line 1", "Permanent pincode", "EWS", "UG degree", "ID proof type"):
+        assert f"<td class='label'>{label}</td>" in html
