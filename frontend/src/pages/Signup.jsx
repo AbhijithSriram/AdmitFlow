@@ -1,10 +1,85 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { GENDERS, validateSignup } from '../utils/authValidation'
+
+const EMPTY_FORM = { fullName: '', dateOfBirth: '', gender: '', email: '', phone: '' }
+
+function Field({ label, error, children }) {
+  return (
+    <label className="flex flex-col gap-1 text-sm font-medium">
+      {label}
+      {children}
+      {error && <span className="text-red-600 font-normal">{error}</span>}
+    </label>
+  )
+}
+
+const INPUT_CLASS = 'border border-gray-300 rounded px-3 py-2 font-normal'
+
 // FR-2: student registration — name, DOB, gender, email, phone + reCAPTCHA.
 export default function Signup() {
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [errors, setErrors] = useState({})
+
+  const setField = (name) => (event) => setForm((prev) => ({ ...prev, [name]: event.target.value }))
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    const found = validateSignup(form)
+    setErrors(found)
+    if (Object.keys(found).length > 0) return
+    console.log('signup form', form) // wired to authApi.signup in a later step
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
-      <form className="w-full max-w-md flex flex-col gap-4">
+      <form onSubmit={handleSubmit} noValidate className="w-full max-w-md flex flex-col gap-4">
         <h1 className="text-2xl font-semibold">Create your account</h1>
-        {/* TODO: full name, DOB, gender, email, phone fields + reCAPTCHA widget */}
+
+        <Field label="Full name" error={errors.fullName}>
+          <input className={INPUT_CLASS} value={form.fullName} onChange={setField('fullName')} autoComplete="name" />
+        </Field>
+
+        <Field label="Date of birth" error={errors.dateOfBirth}>
+          <input type="date" className={INPUT_CLASS} value={form.dateOfBirth} onChange={setField('dateOfBirth')} />
+        </Field>
+
+        <Field label="Gender" error={errors.gender}>
+          <select className={INPUT_CLASS} value={form.gender} onChange={setField('gender')}>
+            <option value="">Select…</option>
+            {GENDERS.map((gender) => (
+              <option key={gender} value={gender}>
+                {gender}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Email" error={errors.email}>
+          <input type="email" className={INPUT_CLASS} value={form.email} onChange={setField('email')} autoComplete="email" />
+        </Field>
+
+        <Field label="Mobile number" error={errors.phone}>
+          <input
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            className={INPUT_CLASS}
+            value={form.phone}
+            onChange={setField('phone')}
+            autoComplete="tel-national"
+          />
+        </Field>
+
+        <button type="submit" className="px-4 py-2 rounded bg-black text-white">
+          Register
+        </button>
+        <p className="text-sm text-gray-600">
+          Already registered?{' '}
+          <Link to="/login" className="underline">
+            Log in
+          </Link>
+        </p>
       </form>
     </div>
   )
