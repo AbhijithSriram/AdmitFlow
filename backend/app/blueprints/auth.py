@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 from app.extensions import db, limiter
 from app.middleware.auth_guard import login_required
 from app.models import Student
-from app.services import email_service, otp_service
+from app.services import email_service, otp_service, recaptcha_service
 
 log = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
@@ -65,6 +65,9 @@ def signup():
     fields, error, field = _validate_signup(body)
     if error:
         return _fail(error, 400, field)
+
+    if not recaptcha_service.verify_token(body.get("recaptcha_token"), request.remote_addr):
+        return _fail("Please complete the reCAPTCHA check.", 400, "recaptcha")
 
     student = Student.query.filter_by(email=fields["email"]).first()
     if student is not None and student.email_verified:

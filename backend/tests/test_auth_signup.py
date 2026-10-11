@@ -69,3 +69,50 @@ def test_unverified_email_can_re_register_with_corrected_details(client):
     assert second.json["data"]["student_id"] == first.json["data"]["student_id"]
     student = Student.query.one()
     assert student.full_name == "Priya R" and student.phone == "9123456780"
+
+
+def test_recaptcha_failure_blocks_signup(app, client, monkeypatch):
+    from app.models import Student
+    from app.services import recaptcha_service
+
+    monkeypatch.setattr(recaptcha_service, "verify_token", lambda token, ip=None: False)
+    r = _signup(client, recaptcha_token="bad")
+    assert r.status_code == 400 and r.json["field"] == "recaptcha"
+    assert Student.query.count() == 0
+
+
+def test_recaptcha_token_is_forwarded_to_verifier(app, client, monkeypatch):
+    from app.services import recaptcha_service
+
+    seen = []
+    monkeypatch.setattr(recaptcha_service, "verify_token", lambda token, ip=None: seen.append(token) or True)
+    assert _signup(client, recaptcha_token="tok-123").status_code == 201
+    assert seen == ["tok-123"]
+
+
+def test_verifier_fails_closed_when_secret_set_but_token_missing(app, monkeypatch):
+    from app.services import recaptcha_service
+
+    monkeypatch.setitem(app.config, "RECAPTCHA_SECRET_KEY", "secret")
+    assert recaptcha_service.verify_token(None) is False
+    assert recaptcha_service.verify_token("") is False
+
+
+def test_verifier_fails_closed_on_network_error(app, monkeypatch):
+    from app.services import recaptcha_service
+
+    def boom(*args, **kwargs):
+        raise OSError("network down")
+
+    monkeypatch.setitem(app.config, "RECAPTCHA_SECRET_KEY", "secret")
+    monkeypatch.setattr(recaptcha_service.urllib.request, "urlopen", boom)
+    assert recaptcha_service.verify_token("tok") is False
+
+
+def test_verifier_fails_closed_in_production_without_secret(app, monkeypatch):
+    from app.services import recaptcha_service
+
+    monkeypatch.setitem(app.config, "RECAPTCHA_SECRET_KEY", None)
+    monkeypatch.setitem(app.config, "TESTING", False)
+    monkeypatch.setitem(app.config, "DEBUG", False)
+    assert recaptcha_service.verify_token("tok") is False
