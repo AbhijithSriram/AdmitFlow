@@ -1,24 +1,18 @@
 import { Link } from 'react-router-dom'
+import { INSTITUTION_NAME, KEY_DATES, PROGRAMMES as PROGRAMME_SPECIALISATIONS } from '../content/institution'
 
-const PROGRAMMES = [
-  { name: 'B.Tech', detail: 'Computer Science, Electronics, Mechanical, Civil' },
-  { name: 'B.Sc', detail: 'Physics, Chemistry, Mathematics, Data Science' },
-  { name: 'MBA', detail: 'Finance, Marketing, Operations, Analytics' },
-]
-
-const KEY_DATES = [
-  { label: 'Applications open', value: '1 January' },
-  { label: 'Last date to apply', value: '31 March' },
-  { label: 'Entrance test', value: '20 April' },
-  { label: 'Results announced', value: '15 May' },
-]
+// Same list the application form offers in Step 4, so the two can never disagree.
+const PROGRAMMES = Object.entries(PROGRAMME_SPECIALISATIONS).map(([name, specialisations]) => ({
+  name,
+  detail: specialisations.join(', '),
+}))
 
 // FR-1: landing page — institution info, programmes, key dates, login/register CTAs.
 export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-        <span className="text-xl font-semibold">AdmitFlow</span>
+        <span className="text-xl font-semibold">{INSTITUTION_NAME}</span>
         <nav className="flex gap-3">
           <Link to="/login" className="px-4 py-2 rounded bg-black text-white">
             Login
@@ -44,13 +38,18 @@ export default function Landing() {
               Continue an application
             </Link>
           </div>
+          <p className="text-sm">
+            <a href="/brochure.pdf" target="_blank" rel="noopener noreferrer" className="underline">
+              Download the information brochure (PDF)
+            </a>
+          </p>
         </section>
 
         <section aria-labelledby="programmes-heading" className="flex flex-col gap-4">
           <h2 id="programmes-heading" className="text-2xl font-semibold">
             Programmes
           </h2>
-          <ul className="grid gap-4 sm:grid-cols-3">
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {PROGRAMMES.map((programme) => (
               <li key={programme.name} className="border border-gray-200 rounded p-4">
                 <h3 className="font-semibold">{programme.name}</h3>

@@ -7,6 +7,20 @@ export const apiClient = axios.create({
   withCredentials: true,
 })
 
+// A student session that expires mid-use (the 30-minute idle timeout) should send them back to
+// login instead of leaving pages showing errors. AuthContext listens for this event. Auth and
+// admin endpoints are excluded because they legitimately answer 401 (wrong password, logged out).
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const url = error.config?.url ?? ''
+    if (error.response?.status === 401 && !url.startsWith('/api/auth/') && !url.startsWith('/api/admin')) {
+      window.dispatchEvent(new Event('admitflow:session-expired'))
+    }
+    return Promise.reject(error)
+  },
+)
+
 export const authApi = {
   signup: (payload) => apiClient.post('/api/auth/signup', payload),
   sendOtp: (payload) => apiClient.post('/api/auth/send-otp', payload),

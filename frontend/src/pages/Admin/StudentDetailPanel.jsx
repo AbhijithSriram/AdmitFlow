@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
 import StatusBadge from '../../components/StatusBadge'
+import { humanize, isInternalKey } from '../../utils/fieldLabels'
 import { errorMessage, formatDate, formatDateTime } from './adminUtils'
 
-const STEP_TITLES = { 1: 'Personal details', 2: 'Address', 3: 'Academic details', 4: 'Programme preference', 5: 'Entrance / test details' }
+const STEP_TITLES = { 1: 'Personal details', 2: 'Address', 3: 'Academic details', 4: 'Programme preference', 5: 'Entrance / test details', 6: 'ID proof details' }
 const DOC_LABELS = { photo: 'Photo', signature: 'Signature', id_proof: 'ID proof', application_pdf: 'Application PDF' }
 
-const humanise = (key) => key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
-const show = (v) => (v === null || v === '' || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v))
+const show = (v) => {
+  if (v === null || v === '' || v === undefined) return '—'
+  if (v === true) return 'Yes'
+  if (v === false) return 'No'
+  return typeof v === 'object' ? JSON.stringify(v) : String(v)
+}
 
 function Fields({ rows }) {
   return (
@@ -136,7 +141,7 @@ export default function StudentDetailPanel({ studentId, onClose, onDelete, onUna
 
             {Object.entries(detail.steps).map(([n, data]) => (
               <Section key={n} title={STEP_TITLES[n] || `Step ${n}`}>
-                <Fields rows={Object.entries(data).map(([k, v]) => [humanise(k), v])} />
+                <Fields rows={Object.entries(data).filter(([k]) => !isInternalKey(k)).map(([k, v]) => [humanize(k), v])} />
               </Section>
             ))}
 

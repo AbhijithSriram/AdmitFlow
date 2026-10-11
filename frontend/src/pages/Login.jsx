@@ -28,7 +28,8 @@ export default function Login() {
     setSubmitting(true)
     try {
       await login(email.trim(), password)
-      navigate('/dashboard', { replace: true })
+      // Come back to the page the student was trying to reach (set by RequireAuth).
+      navigate(location.state?.from ?? '/dashboard', { replace: true })
     } catch (err) {
       setError(err.response?.data?.error ?? 'Something went wrong. Please try again.')
     } finally {

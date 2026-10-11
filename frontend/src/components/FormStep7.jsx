@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { applicationApi, studentApi } from '../api/client'
 import { usePayment } from '../hooks/usePayment'
+import { display, flatten, humanize } from '../utils/fieldLabels'
 
 // FR-6.9: Step 7 — Preview & Payment (read-only summary, declaration, Razorpay checkout).
 //
@@ -168,48 +169,4 @@ export default function FormStep7({ onBack }) {
       </div>
     </div>
   )
-}
-
-// Flattens one step's (possibly nested) object into "label -> value" rows. Generic on purpose:
-// the field names belong to Steps 1-6, and this preview shouldn't need to know them.
-function flatten(data, prefix = '') {
-  const rows = {}
-  for (const [key, value] of Object.entries(data ?? {})) {
-    // `*_url` entries are internal storage keys (applications/<id>/photo.png), not for students.
-    if (key.endsWith('_url')) continue
-    const label = prefix ? `${prefix} / ${key}` : key
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      Object.assign(rows, flatten(value, label))
-    } else {
-      rows[label] = value
-    }
-  }
-  return rows
-}
-
-const WORDS = {
-  ews: 'EWS', ug: 'UG', id: 'ID', cgpa: 'CGPA',
-  comm: 'Communication', perm: 'Permanent', line1: 'line 1', line2: 'line 2',
-}
-
-// 'father_name' -> 'Father name', 'comm_line1' -> 'Communication line 1', 'ews' -> 'EWS'
-function humanize(label) {
-  return label
-    .split(' / ')
-    .map((part) => {
-      const text = part
-        .replace(/_/g, ' ')
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((word) => WORDS[word.toLowerCase()] ?? word)
-        .join(' ')
-      return text.charAt(0).toUpperCase() + text.slice(1)
-    })
-    .join(' / ')
-}
-
-function display(value) {
-  if (value === null || value === undefined || value === '') return '—'
-  if (Array.isArray(value)) return value.join(', ')
-  return String(value)
 }

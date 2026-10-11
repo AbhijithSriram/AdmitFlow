@@ -178,7 +178,9 @@ export default function AdminDashboard() {
               {!loading && data.students.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-3 py-10 text-center text-slate-600">
-                    No applicants match these filters. Clear a filter or change the search.
+                    {query.q || query.stage || query.payment_status
+                      ? 'No applicants match these filters. Clear a filter or change the search.'
+                      : 'No applicants have registered yet.'}
                   </td>
                 </tr>
               )}

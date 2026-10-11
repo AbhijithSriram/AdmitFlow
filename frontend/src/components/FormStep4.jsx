@@ -1,12 +1,5 @@
 import React, { useState, useRef } from 'react';
-
-// TODO: PLACEHOLDER LIST. Replace with the institution's real programmes and specialisations.
-const PROGRAMMES = {
-  'B.Tech': ['CSE', 'IT', 'ECE', 'EEE', 'Mechanical', 'Civil'],
-  'M.Tech': ['Computer Science', 'VLSI Design', 'Data Science', 'Structural Engineering'],
-  'MCA': ['General'],
-  'M.Sc.': ['Computer Science', 'Mathematics', 'Physics', 'Data Science'],
-};
+import { PROGRAMMES } from '../content/institution';
 
 const inputCls = 'mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-2';
 

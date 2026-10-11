@@ -7,22 +7,12 @@ import FormStep5 from '../components/FormStep5';
 import FormStep6 from '../components/FormStep6';
 import FormStep7 from '../components/FormStep7';
 import FormStepNav from '../components/FormStepNav';
+import { useNavigate } from 'react-router-dom';
 import { apiClient, applicationApi } from '../api/client';
+import AppHeader from '../components/AppHeader';
+import { GUIDELINES } from '../content/institution';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useFormRehydrate } from '../hooks/useFormRehydrate';
-
-// TODO: replace this placeholder with the exact guidelines text from the SRD.
-const GUIDELINES = [
-  'Please read these guidelines carefully before starting your application.',
-  'All information you provide must be accurate and match your official documents.',
-  'Your progress is saved automatically as you fill in each field.',
-  'You will need a passport-size photograph (PNG), a signature (PNG) and an ID proof (PDF).',
-  'Applications cannot be edited after payment is completed.',
-  'Providing false information may lead to cancellation of your application.',
-  'The application fee is non-refundable.',
-  'Keep your registration details and receipts safe for future reference.',
-  'By clicking "I Agree & Proceed" you confirm that you have read and accepted these guidelines.',
-];
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype;
@@ -72,7 +62,8 @@ function Guidelines({ onAgree, busy, error }) {
   );
 }
 
-export default function ApplicationForm() {
+function ApplicationFormBody() {
+  const navigate = useNavigate();
   const [phase, setPhase] = useState('loading'); // loading | guidelines | form | error
   const [loadError, setLoadError] = useState('');
   const [applicationId, setApplicationId] = useState(null);
@@ -104,6 +95,9 @@ export default function ApplicationForm() {
         if (!res.data?.success) {
           setLoadError('Could not load your application.');
           setPhase('error');
+        } else if (d?.status === 'PAID') {
+          // Paid applications are final (the server refuses edits): nothing to fill in here.
+          navigate('/dashboard', { replace: true });
         } else if (d?.application_id && d.guidelines_accepted) {
           setApplicationId(d.application_id);
           setResumeId(d.application_id);
@@ -282,5 +276,14 @@ export default function ApplicationForm() {
       )}
       {currentStep === 7 && <FormStep7 onBack={handleBack} />}
     </div>
+  );
+}
+
+export default function ApplicationForm() {
+  return (
+    <>
+      <AppHeader />
+      <ApplicationFormBody />
+    </>
   );
 }

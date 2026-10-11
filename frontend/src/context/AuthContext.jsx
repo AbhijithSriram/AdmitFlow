@@ -26,6 +26,13 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // The API client fires this when a request comes back 401 mid-session (idle timeout).
+  useEffect(() => {
+    const onExpired = () => setStudent(null)
+    window.addEventListener('admitflow:session-expired', onExpired)
+    return () => window.removeEventListener('admitflow:session-expired', onExpired)
+  }, [])
+
   const login = useCallback(async (email, password) => {
     const { data } = await authApi.login({ email, password })
     setStudent(data.data.student)
