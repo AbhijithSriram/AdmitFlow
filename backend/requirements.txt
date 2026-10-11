@@ -13,4 +13,5 @@ razorpay==1.4.2
 setuptools==75.6.0  # provides pkg_resources, which the razorpay SDK imports but doesn't declare as a dependency
 Pillow==10.4.0
 WeasyPrint==62.3
+pydyf==0.10.0  # WeasyPrint 62 breaks on pydyf >= 0.11 ("'super' object has no attribute 'transform'") but doesn't cap it
 gunicorn==23.0.0
