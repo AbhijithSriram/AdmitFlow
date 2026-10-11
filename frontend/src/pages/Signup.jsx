@@ -67,6 +67,9 @@ export default function Signup() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <form onSubmit={handleSubmit} noValidate className="w-full max-w-md flex flex-col gap-4">
+        <Link to="/" className="text-sm text-gray-600 underline">
+          &larr; Back to home
+        </Link>
         <h1 className="text-2xl font-semibold">Create your account</h1>
 
         <Field label="Full name" error={errors.fullName}>
