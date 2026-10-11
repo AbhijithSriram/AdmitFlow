@@ -34,6 +34,15 @@ export default function SetPassword() {
     )
   }
 
+  // Cancelling just abandons this step; the server-side OTP proof expires on its own.
+  const handleCancel = () => {
+    try {
+      sessionStorage.removeItem('admitflow_otp_context')
+    } catch {
+      // ignore: storage unavailable
+    }
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     const found = {}
@@ -99,6 +108,9 @@ export default function SetPassword() {
         <button type="submit" disabled={submitting} className="px-4 py-2 rounded bg-black text-white disabled:opacity-50">
           {submitting ? 'Saving…' : 'Save password'}
         </button>
+        <Link to="/login" onClick={handleCancel} className="text-sm text-center text-gray-600 underline">
+          Cancel
+        </Link>
       </form>
     </div>
   )

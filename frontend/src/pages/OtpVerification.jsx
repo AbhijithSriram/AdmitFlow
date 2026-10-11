@@ -42,6 +42,17 @@ export default function OtpVerification() {
     return () => clearTimeout(timer)
   }, [cooldown])
 
+  // Drop the remembered email so "Back" really starts over rather than re-opening this step.
+  const handleBack = () => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore: storage unavailable
+    }
+  }
+  const backTarget = purpose === 'password_reset' ? '/login' : '/signup'
+  const backLabel = purpose === 'password_reset' ? 'Back to login' : 'Back to registration'
+
   if (!email) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
@@ -120,6 +131,9 @@ export default function OtpVerification() {
         >
           {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
         </button>
+        <Link to={backTarget} onClick={handleBack} className="text-sm text-center text-gray-600 underline">
+          {backLabel}
+        </Link>
       </form>
     </div>
   )
