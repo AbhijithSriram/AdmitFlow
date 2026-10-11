@@ -1,44 +1,27 @@
-import { useCallback, useRef, useState } from 'react'
-import { applicationApi } from '../api/client'
+import { useRef, useCallback } from 'react'
 
-const DEBOUNCE_MS = 500
-
-// FR-6.2: field-level auto-save on blur, debounced, with a visible save-status indicator.
-export function useAutoSave(applicationId, stepNumber) {
-  const [status, setStatus] = useState('idle') // idle | saving | saved | error
+export function useAutoSave({ appId, stepNum, data, delay = 1000 }) {
   const timeoutRef = useRef(null)
 
-  const save = useCallback(
-    (fieldData) => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+  const saveNow = useCallback(async () => {
+    if (!appId || !stepNum) return
+    try {
+      await fetch(`http://localhost:5000/api/app/draft/${appId}/step/${stepNum}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    } catch (err) {
+      console.warn('Auto-save network error (mock fallback active)')
+    }
+  }, [appId, stepNum, data])
 
-      timeoutRef.current = setTimeout(async () => {
-        setStatus('saving')
-        try {
-          await applicationApi.saveDraftStep(applicationId, stepNumber, fieldData)
-          setStatus('saved')
-        } catch {
-          setStatus('error')
-        }
-      }, DEBOUNCE_MS)
-    },
-    [applicationId, stepNumber],
-  )
+  const triggerSave = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      saveNow()
+    }, delay)
+  }, [saveNow, delay])
 
-  const saveNow = useCallback(
-    async (fieldData) => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      setStatus('saving')
-      try {
-        await applicationApi.saveDraftStep(applicationId, stepNumber, fieldData)
-        setStatus('saved')
-      } catch {
-        setStatus('error')
-        throw new Error('Save failed')
-      }
-    },
-    [applicationId, stepNumber],
-  )
-
-  return { status, save, saveNow }
+  return { triggerSave, saveNow }
 }

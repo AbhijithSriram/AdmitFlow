@@ -1,31 +1,21 @@
 import { useEffect, useState } from 'react'
-import { applicationApi } from '../api/client'
 
-// FR-6.2: rehydrate all step data on page load / refresh so no progress is ever lost.
-export function useFormRehydrate(applicationId) {
-  const [draft, setDraft] = useState(null)
-  const [loading, setLoading] = useState(true)
+export function useFormRehydrate(appId, setFormData) {
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!applicationId) {
-      setLoading(false)
-      return
-    }
-
-    let cancelled = false
-    applicationApi
-      .getDraft(applicationId)
-      .then((response) => {
-        if (!cancelled) setDraft(response.data.data)
+    if (!appId) return
+    setLoading(true)
+    fetch(`http://localhost:5000/api/app/draft/${appId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && data.draft) {
+          setFormData((prev) => ({ ...prev, ...data.draft }))
+        }
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+      .catch(() => null)
+      .finally(() => setLoading(false))
+  }, [appId, setFormData])
 
-    return () => {
-      cancelled = true
-    }
-  }, [applicationId])
-
-  return { draft, loading }
+  return { loading }
 }
