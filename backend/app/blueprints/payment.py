@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from decimal import Decimal
 
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, abort, current_app, jsonify, make_response, request, session
 
 from app.extensions import db
 from app.middleware.auth_guard import login_required
@@ -19,6 +19,11 @@ APPLICATION_FEE_PAISE = int(os.environ.get("APPLICATION_FEE_PAISE", 100000))
 def _current_student_and_application():
     student_id = session["student_id"]
     student = db.session.get(Student, student_id)
+    if student is None:
+        # The session outlived the student (e.g. an admin hard-deleted them while they
+        # were still logged in). Treat it as logged out, like /api/auth/me does.
+        session.clear()
+        abort(make_response(jsonify({"success": False, "error": "Not authenticated"}), 401))
     application = Application.query.filter_by(student_id=student_id).first()
     return student, application
 
