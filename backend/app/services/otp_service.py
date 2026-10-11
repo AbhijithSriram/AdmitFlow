@@ -1,4 +1,4 @@
-import random
+import secrets
 from datetime import datetime, timedelta
 
 from flask import current_app
@@ -8,8 +8,8 @@ from app.models import OtpToken
 
 
 def generate_otp() -> str:
-    """Return a random 6-digit numeric OTP string."""
-    return f"{random.randint(0, 999999):06d}"
+    """Return a cryptographically random 6-digit numeric OTP string."""
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def create_otp_token(student_id: str, purpose: str) -> str:
