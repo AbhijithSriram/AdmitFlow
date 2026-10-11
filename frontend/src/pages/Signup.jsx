@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/client'
+import Recaptcha, { RECAPTCHA_SITE_KEY } from '../components/Recaptcha'
 import { GENDERS, validateSignup } from '../utils/authValidation'
 
 const EMPTY_FORM = { fullName: '', dateOfBirth: '', gender: '', email: '', phone: '' }
@@ -22,6 +23,8 @@ export default function Signup() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  const [recaptchaToken, setRecaptchaToken] = useState('')
+  const [captchaAttempt, setCaptchaAttempt] = useState(0) // bump to re-mount the widget: tokens are single-use
   const navigate = useNavigate()
 
   const setField = (name) => (event) => setForm((prev) => ({ ...prev, [name]: event.target.value }))
@@ -29,6 +32,8 @@ export default function Signup() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     const found = validateSignup(form)
+    setErrors(found)
+    if (RECAPTCHA_SITE_KEY && !recaptchaToken) found.recaptcha = 'Please complete the reCAPTCHA check.'
     setErrors(found)
     if (Object.keys(found).length > 0) return
 
@@ -40,6 +45,7 @@ export default function Signup() {
         gender: form.gender,
         email: form.email.trim(),
         phone: form.phone.trim(),
+        recaptcha_token: recaptchaToken,
       })
       navigate('/verify-otp', { state: { email: data.data.email } })
     } catch (err) {
@@ -49,6 +55,8 @@ export default function Signup() {
       const field = fieldMap[body?.field] ?? body?.field ?? 'form'
       setErrors({ [field]: body?.error ?? 'Something went wrong. Please try again.' })
     } finally {
+      setRecaptchaToken('')
+      setCaptchaAttempt((n) => n + 1)
       setSubmitting(false)
     }
   }
@@ -92,6 +100,11 @@ export default function Signup() {
             autoComplete="tel-national"
           />
         </Field>
+
+        <div className="flex flex-col gap-1">
+          <Recaptcha key={captchaAttempt} onChange={setRecaptchaToken} />
+          {errors.recaptcha && <span className="text-red-600 text-sm">{errors.recaptcha}</span>}
+        </div>
 
         {errors.form && <p className="text-red-600 text-sm">{errors.form}</p>}
 
