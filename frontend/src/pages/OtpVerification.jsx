@@ -89,7 +89,9 @@ export default function OtpVerification() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <form onSubmit={handleSubmit} noValidate className="w-full max-w-sm flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold">Verify your email</h1>
+        <h1 className="text-2xl font-semibold">
+          {purpose === 'password_reset' ? 'Enter your reset code' : 'Verify your email'}
+        </h1>
         <p className="text-sm text-gray-600">
           Enter the 6-digit code we sent to <b>{email}</b>. It expires in 10 minutes.
         </p>
