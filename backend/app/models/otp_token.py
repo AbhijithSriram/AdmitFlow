@@ -13,4 +13,5 @@ class OtpToken(db.Model):
     purpose = db.Column(db.String(30), nullable=False)  # email_verification | password_reset
     expires_at = db.Column(db.DateTime, nullable=False)
     consumed_at = db.Column(db.DateTime, nullable=True)
+    failed_attempts = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

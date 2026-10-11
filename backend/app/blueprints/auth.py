@@ -105,7 +105,12 @@ def signup():
 
     phone_owner = Student.query.filter_by(phone=fields["phone"]).first()
     if phone_owner is not None and (student is None or phone_owner.id != student.id):
-        return _fail("This mobile number is already registered.", 409, "phone")
+        if phone_owner.email_verified:
+            return _fail("This mobile number is already registered.", 409, "phone")
+        # An unverified registration proved nothing (it has no password, no login and no
+        # application), so it must not be able to lock the real owner out of their own number.
+        db.session.delete(phone_owner)
+        db.session.flush()
 
     if student is None:
         student = Student(**fields)

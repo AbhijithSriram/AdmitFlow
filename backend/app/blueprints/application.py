@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from io import BytesIO
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session
 from PIL import Image
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
@@ -11,6 +11,10 @@ from app.services import minio_service
 from app.middleware.auth_guard import login_required
 
 application_bp = Blueprint("application", __name__)
+
+# The largest step (Step 1 or 2) is well under 5 KB of JSON; this stops one step being used
+# to store megabytes per student.
+MAX_STEP_PAYLOAD_BYTES = 20 * 1024
 
 
 def make_envelope(success=True, data=None, error=None, code=200):
@@ -148,9 +152,19 @@ def save_draft_step(application_id, step_number):
     if locked:
         return locked
 
+    if len(request.get_data()) > MAX_STEP_PAYLOAD_BYTES:
+        return make_envelope(success=False, error="This step's data is too large to save.", code=413)
+
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return make_envelope(success=False, error="Request body must be a JSON object", code=400)
+
+    if step_number == 4:
+        for key in ("programme", "specialisation"):
+            if key in payload and (not isinstance(payload[key], str) or len(payload[key]) > 255):
+                return make_envelope(
+                    success=False, error=f"{key.capitalize()} must be text of at most 255 characters.", code=400
+                )
 
     try:
         # Step 4: Sync programme & specialisation directly to application record
@@ -174,9 +188,10 @@ def save_draft_step(application_id, step_number):
         )
         db.session.execute(stmt)
         db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return make_envelope(success=False, error=f"Failed to save draft: {str(e)}", code=500)
+        current_app.logger.exception("Could not save step %s of application %s", step_number, app.id)
+        return make_envelope(success=False, error="Could not save this step. Please try again.", code=500)
 
     return make_envelope(success=True, data={"step_number": step_number, "saved": True})
 
@@ -256,18 +271,20 @@ def upload_document(application_id, doc_type):
     # Upload the NEW file first so a failed upload never loses the old one.
     try:
         minio_service.upload_object(object_name, file_bytes, content_type)
-    except Exception as e:
+    except Exception:
+        current_app.logger.exception("Storage upload failed for application %s (%s)", app.id, doc_type)
         return make_envelope(
-            success=False, error=f"Storage upload failed: {str(e)}", code=502
+            success=False, error="File storage is unavailable right now. Please try again shortly.", code=502
         )
 
     # Store object_name in DB
     try:
         setattr(app, f"{doc_type}_url", object_name)
         db.session.commit()
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return make_envelope(success=False, error=f"Failed to record upload: {str(e)}", code=500)
+        current_app.logger.exception("Could not record upload for application %s (%s)", app.id, doc_type)
+        return make_envelope(success=False, error="Could not save the upload. Please try again.", code=500)
 
     # Remove the old object only if it has a different name (same name was
     # already overwritten by the upload). A cleanup failure must not fail the request.

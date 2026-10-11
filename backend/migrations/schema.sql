@@ -28,6 +28,7 @@ CREATE TABLE otp_tokens (
     purpose     VARCHAR(30) NOT NULL, -- email_verification | password_reset
     expires_at  TIMESTAMP NOT NULL,
     consumed_at TIMESTAMP,
+    failed_attempts INTEGER NOT NULL DEFAULT 0, -- wrong guesses; the code is burned after 5
     created_at  TIMESTAMP NOT NULL DEFAULT now()
 );
 
