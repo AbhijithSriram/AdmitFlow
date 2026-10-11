@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session
 
 from app.extensions import bcrypt, db, limiter
 from app.middleware.auth_guard import login_required
@@ -28,6 +28,21 @@ def _fail(message, status=400, field=None):
     if field:
         body["field"] = field
     return jsonify(body), status
+
+
+_dummy_hash = None
+
+
+def _burn_bcrypt_time(password: str) -> None:
+    """Compare against a real hash when the email is unknown, so response time doesn't reveal it."""
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = bcrypt.generate_password_hash("not-a-real-password").decode("utf-8")
+    bcrypt.check_password_hash(_dummy_hash, password)
+
+
+def _student_payload(student: Student) -> dict:
+    return {"id": str(student.id), "full_name": student.full_name, "email": student.email}
 
 
 def _clean_str(value) -> str:
@@ -226,11 +241,63 @@ def set_password():
 @limiter.limit("10 per minute")
 def login():
     """Authenticate with email + password and create a student session."""
-    return jsonify({"success": False, "error": "Not implemented"}), 501
+    body = request.get_json(silent=True) or {}
+    email = _clean_str(body.get("email")).lower()
+    password = body.get("password")
+    if not email or not isinstance(password, str) or not password:
+        return _fail("Enter your email and password.", 400)
+
+    cfg = current_app.config
+    now = datetime.utcnow()
+    student = Student.query.filter_by(email=email).first()
+    bad_credentials = _fail("Incorrect email or password.", 401)
+
+    if student is None or student.password_hash is None or not student.email_verified:
+        _burn_bcrypt_time(password)
+        return bad_credentials
+
+    if student.locked_until is not None and student.locked_until > now:
+        minutes = int((student.locked_until - now).total_seconds() // 60) + 1
+        return _fail(f"Too many failed attempts. Try again in {minutes} minute(s).", 423)
+
+    if student.locked_until is not None:  # lock has expired: start counting from zero again
+        student.locked_until = None
+        student.failed_login_attempts = 0
+
+    if not bcrypt.check_password_hash(student.password_hash, password):
+        student.failed_login_attempts += 1
+        if student.failed_login_attempts >= cfg["LOGIN_LOCKOUT_ATTEMPTS"]:
+            student.locked_until = now + timedelta(minutes=cfg["LOGIN_LOCKOUT_MINUTES"])
+            student.failed_login_attempts = 0
+            log.warning("account locked student_id=%s", student.id)
+        db.session.commit()
+        return bad_credentials
+
+    student.failed_login_attempts = 0
+    student.locked_until = None
+    db.session.commit()
+
+    session.clear()  # drop any pre-login state (e.g. otp_verified) and start a fresh session
+    session["student_id"] = str(student.id)
+    session.permanent = True
+    log.info("student login ok student_id=%s", student.id)
+    return _ok({"student": _student_payload(student)})
+
+
+@auth_bp.route("/me", methods=["GET"])
+@login_required
+def me():
+    """Lets the React app restore the student session after a page refresh."""
+    student = db.session.get(Student, session["student_id"])
+    if student is None:
+        session.clear()
+        return _fail("Not authenticated", 401)
+    return _ok({"student": _student_payload(student)})
 
 
 @auth_bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
     """Invalidate the current student session."""
-    return jsonify({"success": False, "error": "Not implemented"}), 501
+    session.clear()
+    return _ok({"message": "Logged out."})
