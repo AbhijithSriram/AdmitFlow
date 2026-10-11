@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request, session
 
-from app.extensions import db, limiter
+from app.extensions import bcrypt, db, limiter
 from app.middleware.auth_guard import login_required
 from app.models import OtpToken, Student
 from app.services import email_service, otp_service, recaptcha_service
@@ -32,6 +32,19 @@ def _fail(message, status=400, field=None):
 
 def _clean_str(value) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _password_error(password) -> str | None:
+    """Same rules as the client (utils/authValidation.js): 8+ chars, a number, a special char."""
+    if not isinstance(password, str) or len(password) < 8:
+        return "Password must be at least 8 characters."
+    if len(password.encode("utf-8")) > 72:  # bcrypt ignores everything past 72 bytes
+        return "Password must be at most 72 bytes."
+    if not re.search(r"\d", password):
+        return "Password must contain at least one number."
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return "Password must contain at least one special character."
+    return None
 
 
 def _validate_signup(body: dict):
@@ -176,7 +189,37 @@ def verify_otp():
 @auth_bp.route("/set-password", methods=["POST"])
 def set_password():
     """Set the account password after OTP verification."""
-    return jsonify({"success": False, "error": "Not implemented"}), 501
+    body = request.get_json(silent=True) or {}
+    proof = session.get("otp_verified")
+    expired = _fail("Your verification has expired. Please verify your email again.", 403)
+    if not isinstance(proof, dict):
+        return expired
+    try:
+        if datetime.fromisoformat(proof["expires"]) < datetime.utcnow():
+            session.pop("otp_verified", None)
+            return expired
+    except (KeyError, ValueError):
+        return expired
+
+    password = body.get("password")
+    error = _password_error(password)
+    if error:
+        return _fail(error, 400, "password")
+    if body.get("confirm_password") != password:
+        return _fail("Passwords do not match.", 400, "confirm_password")
+
+    student = db.session.get(Student, proof["student_id"])
+    if student is None or not student.email_verified:
+        return expired
+
+    student.password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+    student.failed_login_attempts = 0
+    student.locked_until = None
+    db.session.commit()
+    session.pop("otp_verified", None)  # one OTP verification buys exactly one password change
+
+    log.info("password set student_id=%s purpose=%s", student.id, proof.get("purpose"))
+    return _ok({"message": "Password set. You can now log in."})
 
 
 @auth_bp.route("/login", methods=["POST"])
