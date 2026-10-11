@@ -14,11 +14,13 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [showSavedNotice, setShowSavedNotice] = useState(Boolean(location.state?.passwordSet))
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
+    setShowSavedNotice(false)
     if (!password || validateEmail(email)) {
       setError('Enter your email and password.')
       return
@@ -37,6 +39,7 @@ export default function Login() {
   // Forgot password reuses the OTP page with purpose=password_reset.
   const handleForgotPassword = async () => {
     setError('')
+    setShowSavedNotice(false)
     if (validateEmail(email)) {
       setError('Enter your email above first, then choose "Forgot password".')
       return
@@ -58,7 +61,7 @@ export default function Login() {
       <form onSubmit={handleSubmit} noValidate className="w-full max-w-sm flex flex-col gap-4">
         <h1 className="text-2xl font-semibold">Log in</h1>
 
-        {location.state?.passwordSet && (
+        {showSavedNotice && (
           <p className="text-green-700 text-sm">Password saved. Log in to continue.</p>
         )}
 
