@@ -39,13 +39,29 @@ cp .env.template .env
 
 Fill in `DATABASE_URL`, MinIO, Razorpay, SMTP, and reCAPTCHA values.
 
-### 2. Database
+### 2. Database and file storage
+
+The quickest way is Docker, which starts PostgreSQL (port 5435) and MinIO (ports 9000 and 9001). The
+development credentials are in `docker-compose.yml`; copy them into your `.env`:
+
+```bash
+docker compose up -d
+```
+
+MinIO no longer publishes prebuilt images, so the first `docker compose up` **builds it from source**
+(`docker/minio/Dockerfile`). That takes a couple of minutes once, then it is cached.
+
+Then create the tables:
 
 ```bash
 createdb admitflow
 psql admitflow -f backend/migrations/schema.sql
 psql admitflow -f backend/migrations/002_admin_portal.sql   # admin sessions + append-only audit log
 ```
+
+`schema.sql` already includes everything. **If your database was created before these changes**, run the
+migrations you have not applied yet (each is safe to re-run):
+`002_admin_portal.sql` (admin sessions and audit log) and `003_otp_attempts.sql` (counts wrong one-time-code guesses).
 
 ### 3. Backend
 

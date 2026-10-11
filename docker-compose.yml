@@ -18,7 +18,10 @@ services:
       - admitflow_postgres_data:/var/lib/postgresql/data
 
   minio:
-    image: quay.io/minio/minio:latest
+    # Built from source (docker/minio/Dockerfile): MinIO no longer publishes prebuilt images.
+    # The first `docker compose up` builds it, which takes a few minutes.
+    build: ./docker/minio
+    image: admitflow/minio:local
     container_name: admitflow_minio
     restart: unless-stopped
     environment:
