@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { authApi } from '../api/client'
 import { GENDERS, validateSignup } from '../utils/authValidation'
 
 const EMPTY_FORM = { fullName: '', dateOfBirth: '', gender: '', email: '', phone: '' }
@@ -20,15 +21,36 @@ const INPUT_CLASS = 'border border-gray-300 rounded px-3 py-2 font-normal'
 export default function Signup() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const navigate = useNavigate()
 
   const setField = (name) => (event) => setForm((prev) => ({ ...prev, [name]: event.target.value }))
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     const found = validateSignup(form)
     setErrors(found)
     if (Object.keys(found).length > 0) return
-    console.log('signup form', form) // wired to authApi.signup in a later step
+
+    setSubmitting(true)
+    try {
+      const { data } = await authApi.signup({
+        full_name: form.fullName.trim(),
+        date_of_birth: form.dateOfBirth,
+        gender: form.gender,
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+      })
+      navigate('/verify-otp', { state: { email: data.data.email } })
+    } catch (err) {
+      const body = err.response?.data
+      // The server names the offending field; map it back onto the form (snake_case -> camelCase).
+      const fieldMap = { full_name: 'fullName', date_of_birth: 'dateOfBirth' }
+      const field = fieldMap[body?.field] ?? body?.field ?? 'form'
+      setErrors({ [field]: body?.error ?? 'Something went wrong. Please try again.' })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -71,8 +93,10 @@ export default function Signup() {
           />
         </Field>
 
-        <button type="submit" className="px-4 py-2 rounded bg-black text-white">
-          Register
+        {errors.form && <p className="text-red-600 text-sm">{errors.form}</p>}
+
+        <button type="submit" disabled={submitting} className="px-4 py-2 rounded bg-black text-white disabled:opacity-50">
+          {submitting ? 'Registering…' : 'Register'}
         </button>
         <p className="text-sm text-gray-600">
           Already registered?{' '}
