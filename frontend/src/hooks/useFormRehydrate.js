@@ -1,21 +1,53 @@
 import { useEffect, useState } from 'react'
+import { applicationApi } from '../api/client'
 
-export function useFormRehydrate(appId, setFormData) {
-  const [loading, setLoading] = useState(false)
+// Loads saved draft data for an application.
+// draft is per-step: { "1": {...}, "2": {...} }; lastStep is the highest saved step (0 if none).
+export function useFormRehydrate(appId) {
+  const [state, setState] = useState({
+    loading: false,
+    loaded: false,
+    error: '',
+    draft: {},
+    lastStep: 0,
+    documents: {},
+    status: null,
+  })
 
   useEffect(() => {
     if (!appId) return
-    setLoading(true)
-    fetch(`http://localhost:5000/api/app/draft/${appId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.success && data.draft) {
-          setFormData((prev) => ({ ...prev, ...data.draft }))
+    let cancelled = false
+    setState((s) => ({ ...s, loading: true, error: '' }))
+
+    applicationApi
+      .getDraft(appId)
+      .then((res) => {
+        if (cancelled) return
+        const d = res.data?.data
+        if (res.data?.success && d) {
+          setState({
+            loading: false,
+            loaded: true,
+            error: '',
+            draft: d.draft || {},
+            lastStep: d.last_step || 0,
+            documents: d.documents || {},
+            status: d.status || null,
+          })
+        } else {
+          setState((s) => ({ ...s, loading: false, error: 'Could not load your saved data.' }))
         }
       })
-      .catch(() => null)
-      .finally(() => setLoading(false))
-  }, [appId, setFormData])
+      .catch(() => {
+        if (!cancelled) {
+          setState((s) => ({ ...s, loading: false, error: 'Could not load your saved data.' }))
+        }
+      })
 
-  return { loading }
+    return () => {
+      cancelled = true
+    }
+  }, [appId])
+
+  return state
 }

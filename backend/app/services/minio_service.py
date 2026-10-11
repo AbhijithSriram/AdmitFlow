@@ -1,49 +1,58 @@
-import io
-import os
+from datetime import timedelta
+from io import BytesIO
+from flask import current_app
 from minio import Minio
-
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME", "admitflow-documents")
 
 
 def get_minio_client():
-  try:
-    client = Minio(
-        MINIO_ENDPOINT,
-        access_key=MINIO_ACCESS_KEY,
-        secret_key=MINIO_SECRET_KEY,
-        secure=False,
+    endpoint = current_app.config["MINIO_ENDPOINT"]
+    access_key = current_app.config["MINIO_ACCESS_KEY"]
+    secret_key = current_app.config["MINIO_SECRET_KEY"]
+    secure = current_app.config.get("MINIO_SECURE", False)
+
+    return Minio(
+        endpoint,
+        access_key=access_key,
+        secret_key=secret_key,
+        secure=secure,
     )
-    if not client.bucket_exists(BUCKET_NAME):
-      client.make_bucket(BUCKET_NAME)
-    return client
-  except Exception as e:
-    print(f"MinIO Client warning: {e}")
-    return None
 
 
-def upload_file(file_data, object_name, content_type):
-  """Uploads a file object to MinIO and returns its public access URL."""
-  client = get_minio_client()
-  if not client:
-    # Local dev fallback URL if MinIO instance is offline
-    return f"http://localhost:9000/{BUCKET_NAME}/{object_name}"
+def upload_object(object_name: str, data_bytes: bytes, content_type: str) -> str:
+    """Upload raw bytes to MinIO and return object_name contract."""
+    client = get_minio_client()
+    bucket = current_app.config["MINIO_BUCKET"]
 
-  try:
-    file_bytes = file_data.read()
-    file_length = len(file_bytes)
-    file_stream = io.BytesIO(file_bytes)
+    if not client.bucket_exists(bucket):
+        client.make_bucket(bucket)
 
+    stream = BytesIO(data_bytes)
     client.put_object(
-        bucket_name=BUCKET_NAME,
+        bucket_name=bucket,
         object_name=object_name,
-        data=file_stream,
-        length=file_length,
+        data=stream,
+        length=len(data_bytes),
         content_type=content_type,
     )
-    return f"http://{MINIO_ENDPOINT}/{BUCKET_NAME}/{object_name}"
-  except Exception as e:
-    print(f"MinIO Upload Error: {e}")
-    return f"http://localhost:9000/{BUCKET_NAME}/{object_name}"
+    return object_name
+
+
+def delete_object(object_name: str) -> None:
+    """Delete an object from MinIO."""
+    client = get_minio_client()
+    bucket = current_app.config["MINIO_BUCKET"]
+    try:
+        client.remove_object(bucket, object_name)
+    except Exception:
+        pass
+
+
+def get_presigned_url(object_name: str, expires_minutes: int = 15) -> str:
+    """Generate a 15-minute presigned download URL."""
+    client = get_minio_client()
+    bucket = current_app.config["MINIO_BUCKET"]
+    return client.presigned_get_object(
+        bucket_name=bucket,
+        object_name=object_name,
+        expires=timedelta(minutes=expires_minutes),
+    )
