@@ -1,16 +1,35 @@
 import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { applicationApi, studentApi } from '../api/client'
 import { usePayment } from '../hooks/usePayment'
 
 // FR-6.9: Step 7 — Preview & Payment (read-only summary, declaration, Razorpay checkout).
 //
-// This component resolves its own application id via GET /api/student/dashboard instead
-// of receiving it as a prop from ApplicationForm.jsx (owned by Person 2). That keeps it
-// self-contained and testable on its own while Steps 1-6 are still being built — see
-// IMPLEMENTATION_PLAN.md's note on stubbing cross-slice dependencies.
+// This component finds its own application id via GET /api/student/dashboard rather than
+// taking it as a prop, so it works wherever it is mounted. GET /api/app/draft/:id returns
+// `{ draft: { "1": {...}, "2": {...} }, documents: {...}, status }` — one object per step.
+
+const STEP_TITLES = {
+  1: 'Personal Details',
+  2: 'Address Details',
+  3: 'Academic Details',
+  4: 'Programme Preference',
+  5: 'Entrance / Test Details',
+  6: 'Documents',
+}
+
+const DOCUMENTS = [
+  ['photo_url', 'Photo'],
+  ['signature_url', 'Signature'],
+  ['id_proof_url', 'ID proof'],
+]
+
 export default function FormStep7({ onBack }) {
+  const navigate = useNavigate()
   const [applicationId, setApplicationId] = useState(null)
-  const [summary, setSummary] = useState({})
+  const [steps, setSteps] = useState({})
+  const [documents, setDocuments] = useState({})
+  const [appStatus, setAppStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [declared, setDeclared] = useState(false)
@@ -31,8 +50,12 @@ export default function FormStep7({ onBack }) {
         }
         if (!cancelled) setApplicationId(id)
 
-        const { data: draft } = await applicationApi.getDraft(id)
-        if (!cancelled) setSummary(draft.data ?? {})
+        const { data: response } = await applicationApi.getDraft(id)
+        if (!cancelled) {
+          setSteps(response.data?.draft ?? {})
+          setDocuments(response.data?.documents ?? {})
+          setAppStatus(response.data?.status ?? null)
+        }
       } catch {
         if (!cancelled) setLoadError('Could not load your application summary.')
       } finally {
@@ -51,6 +74,7 @@ export default function FormStep7({ onBack }) {
       await pay()
       // pay() only resolves after /api/app/payment/confirm has verified the Razorpay
       // signature server-side — the frontend callback alone is never trusted (SRD NFR-1).
+      navigate('/dashboard')
     } catch {
       // usePayment already moved status to 'failed'; the button below re-enables.
     }
@@ -64,22 +88,57 @@ export default function FormStep7({ onBack }) {
     return <p className="text-red-600">{loadError}</p>
   }
 
-  const rows = flatten(summary)
+  if (appStatus === 'PAID') {
+    return (
+      <div>
+        <h2 className="text-xl font-semibold mb-2">Payment complete</h2>
+        <p className="text-sm text-gray-600 mb-4">This application has been paid for and can no longer be edited.</p>
+        <Link to="/dashboard" className="px-4 py-2 rounded bg-black text-white inline-block">
+          Go to dashboard
+        </Link>
+      </div>
+    )
+  }
+
+  const sections = Object.keys(steps)
+    .sort((a, b) => Number(a) - Number(b))
+    .map((key) => ({ title: STEP_TITLES[key] ?? `Step ${key}`, rows: flatten(steps[key]) }))
+    .filter((section) => Object.keys(section.rows).length > 0)
+
+  const busy = status === 'creating' || status === 'processing'
 
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">Preview &amp; Payment</h2>
 
-      <div className="border rounded divide-y mb-6">
-        {Object.entries(rows).map(([label, value]) => (
-          <div key={label} className="flex justify-between px-3 py-2 text-sm">
-            <span className="text-gray-500">{label}</span>
-            <span className="font-medium">{String(value)}</span>
+      {sections.length === 0 && <p className="text-sm text-gray-500 mb-4">No form data saved yet.</p>}
+
+      {sections.map((section) => (
+        <div key={section.title} className="mb-5">
+          <h3 className="font-semibold mb-1">{section.title}</h3>
+          <div className="border rounded divide-y">
+            {Object.entries(section.rows).map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-4 px-3 py-2 text-sm">
+                <span className="text-gray-500">{humanize(label)}</span>
+                <span className="font-medium text-right">{display(value)}</span>
+              </div>
+            ))}
           </div>
-        ))}
-        {Object.keys(rows).length === 0 && (
-          <p className="px-3 py-2 text-sm text-gray-500">No form data saved yet.</p>
-        )}
+        </div>
+      ))}
+
+      <div className="mb-6">
+        <h3 className="font-semibold mb-1">Uploaded documents</h3>
+        <div className="border rounded divide-y">
+          {DOCUMENTS.map(([key, label]) => (
+            <div key={key} className="flex justify-between px-3 py-2 text-sm">
+              <span className="text-gray-500">{label}</span>
+              <span className={documents[key] ? 'font-medium text-green-700' : 'font-medium text-red-600'}>
+                {documents[key] ? 'Uploaded' : 'Missing'}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <label className="flex items-start gap-2 text-sm mb-6">
@@ -101,19 +160,18 @@ export default function FormStep7({ onBack }) {
         <button
           type="button"
           onClick={handlePay}
-          disabled={!applicationId || !declared || status === 'creating' || status === 'processing'}
+          disabled={!applicationId || !declared || busy}
           className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
         >
-          {status === 'creating' || status === 'processing' ? 'Processing…' : 'Proceed to Pay'}
+          {busy ? 'Processing…' : 'Proceed to Pay'}
         </button>
       </div>
     </div>
   )
 }
 
-// Turns a possibly-nested draft object into flat "Label: value" rows for display.
-// Mirrors the flattening in backend/app/services/pdf_service.py for the same reason:
-// this component shouldn't need to know Person 2's exact field names to render them.
+// Flattens one step's (possibly nested) object into "label -> value" rows. Generic on purpose:
+// the field names belong to Steps 1-6, and this preview shouldn't need to know them.
 function flatten(data, prefix = '') {
   const rows = {}
   for (const [key, value] of Object.entries(data ?? {})) {
@@ -125,4 +183,21 @@ function flatten(data, prefix = '') {
     }
   }
   return rows
+}
+
+// 'father_name' -> 'Father name'
+function humanize(label) {
+  return label
+    .split(' / ')
+    .map((part) => {
+      const spaced = part.replace(/_/g, ' ').trim()
+      return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+    })
+    .join(' / ')
+}
+
+function display(value) {
+  if (value === null || value === undefined || value === '') return '—'
+  if (Array.isArray(value)) return value.join(', ')
+  return String(value)
 }

@@ -22,6 +22,18 @@ def make_envelope(success=True, data=None, error=None, code=200):
     return jsonify(payload), code
 
 
+def _locked_after_payment(app):
+    """Once paid, the application is final (see the guidelines) and the PDF/receipt have been
+    generated from it, so editing answers or replacing documents would make them disagree."""
+    if app.status == "PAID":
+        return make_envelope(
+            success=False,
+            error="This application has been paid for and can no longer be edited.",
+            code=409,
+        )
+    return None
+
+
 @application_bp.route("/app/start", methods=["POST"])
 @login_required
 def start_application():
@@ -132,6 +144,10 @@ def save_draft_step(application_id, step_number):
     if step_number < 1 or step_number > 6:
         return make_envelope(success=False, error="Step number must be between 1 and 6", code=400)
 
+    locked = _locked_after_payment(app)
+    if locked:
+        return locked
+
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return make_envelope(success=False, error="Request body must be a JSON object", code=400)
@@ -175,6 +191,10 @@ def upload_document(application_id, doc_type):
 
     if doc_type not in ["photo", "signature", "id_proof"]:
         return make_envelope(success=False, error="Invalid document type", code=400)
+
+    locked = _locked_after_payment(app)
+    if locked:
+        return locked
 
     file = request.files.get("file")
     if not file:

@@ -44,12 +44,23 @@ def _flatten(data, prefix: str = ""):
     return rows
 
 
+def _humanize(label: str) -> str:
+    """'father_name' -> 'Father name', 'address / line_1' -> 'Address / Line 1'."""
+    return " / ".join(part.replace("_", " ").strip().capitalize() for part in str(label).split(" / "))
+
+
 def _rows_html(data: dict) -> str:
-    rows = _flatten(data or {})
-    if not rows:
-        return "<p><em>No form data recorded.</em></p>"
-    cells = "".join(f"<tr><td class='label'>{_esc(label)}</td><td>{_esc(value)}</td></tr>" for label, value in rows)
-    return f"<table>{cells}</table>"
+    """One titled table per step. `data` maps a step title to that step's saved fields."""
+    sections = []
+    for title, fields in (data or {}).items():
+        rows = _flatten(fields) if isinstance(fields, dict) else [(title, fields)]
+        if not rows:
+            continue
+        cells = "".join(
+            f"<tr><td class='label'>{_esc(_humanize(label))}</td><td>{_esc(value)}</td></tr>" for label, value in rows
+        )
+        sections.append(f"<h3>{_esc(title)}</h3><table>{cells}</table>")
+    return "".join(sections) or "<p><em>No form data recorded.</em></p>"
 
 
 _BASE_STYLE = """
@@ -57,6 +68,7 @@ _BASE_STYLE = """
 body { font-family: sans-serif; color: #111; }
 h1 { margin-bottom: 0; }
 h2 { color: #444; font-weight: normal; margin-top: 0.2cm; }
+h3 { margin: 0.6cm 0 0; font-size: 14px; color: #222; }
 table { width: 100%; border-collapse: collapse; margin-top: 0.5cm; }
 td { padding: 4px 8px; border-bottom: 1px solid #ddd; font-size: 12px; }
 td.label { font-weight: bold; width: 40%; }

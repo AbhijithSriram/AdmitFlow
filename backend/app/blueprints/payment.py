@@ -28,15 +28,28 @@ def _current_student_and_application():
     return student, application
 
 
+STEP_TITLES = {
+    1: "Personal Details",
+    2: "Address Details",
+    3: "Academic Details",
+    4: "Programme Preference",
+    5: "Entrance / Test Details",
+    6: "Documents",
+}
+
+
 def _collect_form_data(application_id: str) -> dict:
-    """Merge every saved step's JSONB draft into one dict, for the PDF and the
-    frontend's read-only preview. Deliberately generic: it doesn't assume any
-    particular field names, since those belong to Steps 1-6 (Person 2's file)."""
+    """Each saved step's fields, grouped under that step's title, for the PDF.
+
+    Grouped rather than merged: different steps reuse field names (e.g. `score` in Steps 3
+    and 5, `state` in Steps 1 and 2), and merging would silently overwrite one with the
+    other. Still generic about the fields themselves, which belong to Person 2's steps."""
     drafts = FormDraft.query.filter_by(application_id=application_id).order_by(FormDraft.step_number).all()
-    merged: dict = {}
-    for draft in drafts:
-        merged.update(draft.data or {})
-    return merged
+    return {
+        STEP_TITLES.get(draft.step_number, f"Step {draft.step_number}"): draft.data
+        for draft in drafts
+        if draft.data
+    }
 
 
 @payment_bp.route("/student/dashboard", methods=["GET"])

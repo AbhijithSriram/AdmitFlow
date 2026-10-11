@@ -38,13 +38,16 @@ def upload_object(object_name: str, data_bytes: bytes, content_type: str) -> str
 
 
 def delete_object(object_name: str) -> None:
-    """Delete an object from MinIO."""
+    """Delete an object from MinIO.
+
+    Raises if MinIO cannot be reached. Admin hard-delete depends on that: it aborts instead
+    of deleting the student row and leaving their files orphaned in storage. (Removing a
+    key that does not exist is not an error.) Callers that can tolerate a failed cleanup
+    should catch the exception themselves, as the upload route does.
+    """
     client = get_minio_client()
     bucket = current_app.config["MINIO_BUCKET"]
-    try:
-        client.remove_object(bucket, object_name)
-    except Exception:
-        pass
+    client.remove_object(bucket, object_name)
 
 
 def get_presigned_url(object_name: str, expires_minutes: int = 15) -> str:

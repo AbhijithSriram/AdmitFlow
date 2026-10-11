@@ -1,11 +1,12 @@
 """Payment, dashboard and receipt routes (SRD FR-5, FR-6.9, FR-8, FR-9) against real PostgreSQL."""
 import hashlib
 import hmac
+import io
 
 import pytest
 
 from app.extensions import db
-from app.models import Application, Payment, Student
+from app.models import Application, FormDraft, Payment, Student
 
 SECRET = "test_secret"
 
@@ -227,3 +228,59 @@ def test_receipt_not_available_before_a_pdf_exists(client, make_student):
     student = make_student(status="IN_PROGRESS", files=False)
     _login_as(client, student)
     assert client.get(f"/api/app/receipt/{_application_of(student).id}").status_code == 404
+
+
+# ------------------------------------------------- PDF content and edit lock
+def test_form_data_is_grouped_by_step_so_repeated_field_names_survive(client, make_student):
+    from app.blueprints.payment import _collect_form_data
+    from app.services import pdf_service
+
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    FormDraft.query.filter_by(application_id=application.id).delete()
+    db.session.add(FormDraft(application_id=application.id, step_number=3, data={"score": "8.7"}))
+    db.session.add(FormDraft(application_id=application.id, step_number=5, data={"score": "88"}))
+    db.session.commit()
+
+    grouped = _collect_form_data(application.id)
+
+    assert grouped == {"Academic Details": {"score": "8.7"}, "Entrance / Test Details": {"score": "88"}}
+    html = pdf_service._rows_html(grouped)
+    assert "8.7" in html and "88" in html  # a flat merge would have kept only one of them
+
+
+def test_pdf_labels_are_readable_and_values_are_escaped():
+    from app.services import pdf_service
+
+    html = pdf_service._rows_html({"Personal Details": {"father_name": "<b>R</b> & S", "address": {"line_1": "x"}}})
+
+    assert "Father name" in html and "Address / Line 1" in html
+    assert "&lt;b&gt;R&lt;/b&gt; &amp; S" in html
+    assert "<b>R</b>" not in html
+
+
+def test_paid_application_can_no_longer_be_edited(client, make_student, fake_minio):
+    student = make_student(status="PAID", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    patch = client.patch(f"/api/app/draft/{application.id}/step/1", json={"full_name": "Changed after paying"})
+    upload = client.post(
+        f"/api/app/upload/{application.id}/photo",
+        data={"file": (io.BytesIO(b"x"), "a.png")},
+        content_type="multipart/form-data",
+    )
+
+    assert patch.status_code == 409
+    assert upload.status_code == 409
+    assert FormDraft.query.filter_by(application_id=application.id, step_number=1).one().data == {"father_name": "R"}
+
+
+def test_unpaid_application_can_still_be_edited(client, make_student):
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    resp = client.patch(f"/api/app/draft/{application.id}/step/1", json={"father_name": "Updated"})
+
+    assert resp.status_code == 200
