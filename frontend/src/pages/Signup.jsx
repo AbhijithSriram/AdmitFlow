@@ -47,7 +47,10 @@ export default function Signup() {
         phone: form.phone.trim(),
         recaptcha_token: recaptchaToken,
       })
-      navigate('/verify-otp', { state: { email: data.data.email } })
+      const email = data.data.email
+      // If this send fails the OTP page still offers a Resend button, so don't block on it.
+      await authApi.sendOtp({ email, purpose: 'email_verification' }).catch(() => {})
+      navigate('/verify-otp', { state: { email, purpose: 'email_verification' } })
     } catch (err) {
       const body = err.response?.data
       // The server names the offending field; map it back onto the form (snake_case -> camelCase).
