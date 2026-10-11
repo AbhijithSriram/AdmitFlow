@@ -122,3 +122,23 @@ def test_login_discards_pre_login_otp_proof(client, student):
     _login(client)
     with client.session_transaction() as sess:
         assert "otp_verified" not in sess and sess["student_id"] == str(student.id)
+
+
+def test_forgot_password_flow_changes_password_and_clears_lockout(client, student, monkeypatch):
+    from app.extensions import db
+    from app.services import email_service
+
+    sent = []
+    monkeypatch.setattr(email_service, "send_password_reset_email", lambda to, otp: sent.append(otp))
+    for _ in range(5):
+        _login(client, "wrong")  # lock the account first
+
+    assert client.post("/api/auth/send-otp", json={"email": EMAIL, "purpose": "password_reset"}).status_code == 200
+    r = client.post("/api/auth/verify-otp", json={"email": EMAIL, "otp": sent[0], "purpose": "password_reset"})
+    assert r.status_code == 200
+    new_password = "brand-new-77#"
+    r = client.post("/api/auth/set-password", json={"password": new_password, "confirm_password": new_password})
+    assert r.status_code == 200
+
+    assert _login(client, PASSWORD).status_code == 401  # old password no longer works
+    assert _login(client, new_password).status_code == 200  # and the lock is gone
