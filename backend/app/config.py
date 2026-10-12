@@ -22,6 +22,11 @@ class BaseConfig:
     MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY")
     MINIO_BUCKET = os.environ.get("MINIO_BUCKET", "admitflow")
     MINIO_PRESIGNED_URL_EXPIRY_SECONDS = 15 * 60
+    # On a server MINIO_ENDPOINT is a loopback address that visitors' browsers cannot reach.
+    # When this is set, signed download links use this public host instead (nginx forwards
+    # it to MinIO). Unset on a laptop, where the browser can reach MINIO_ENDPOINT directly.
+    MINIO_PUBLIC_ENDPOINT = os.environ.get("MINIO_PUBLIC_ENDPOINT")
+    MINIO_PUBLIC_SECURE = os.environ.get("MINIO_PUBLIC_SECURE", "1") == "1"
 
     RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID")
     RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET")

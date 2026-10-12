@@ -50,9 +50,30 @@ def delete_object(object_name: str) -> None:
     client.remove_object(bucket, object_name)
 
 
+def _signing_client() -> Minio:
+    """The client that signs download links.
+
+    A link embeds the host it was signed for, and the browser has to be able to open that
+    host. On a server MINIO_ENDPOINT is 127.0.0.1, which only the server itself can reach, so
+    links are signed for MINIO_PUBLIC_ENDPOINT instead (nginx forwards it to MinIO and keeps
+    the Host header, so the signature still verifies). Giving the region explicitly means
+    signing needs no network call to that public host.
+    """
+    public = current_app.config.get("MINIO_PUBLIC_ENDPOINT")
+    if not public:
+        return get_minio_client()
+    return Minio(
+        public,
+        access_key=current_app.config["MINIO_ACCESS_KEY"],
+        secret_key=current_app.config["MINIO_SECRET_KEY"],
+        secure=current_app.config.get("MINIO_PUBLIC_SECURE", True),
+        region="us-east-1",
+    )
+
+
 def get_presigned_url(object_name: str, expires_minutes: int = 15) -> str:
     """Generate a 15-minute presigned download URL."""
-    client = get_minio_client()
+    client = _signing_client()
     bucket = current_app.config["MINIO_BUCKET"]
     return client.presigned_get_object(
         bucket_name=bucket,
