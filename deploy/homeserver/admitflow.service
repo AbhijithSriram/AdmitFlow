@@ -1,0 +1,47 @@
+# systemd unit for the AdmitFlow API. Installed by deploy/homeserver/install.sh.
+#
+# Logs:  journalctl -u admitflow -f
+
+[Unit]
+Description=AdmitFlow admissions portal (Flask API behind nginx)
+After=network-online.target postgresql.service admitflow-minio.service
+Wants=network-online.target admitflow-minio.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=abhijith
+Group=abhijith
+
+WorkingDirectory=/home/abhijith/admitflow/backend
+Environment=PYTHONUNBUFFERED=1
+
+# Secrets live here, not in the unit file and not in the repository. systemd parses this
+# itself (it is not a shell): no quotes, no $substitution.
+EnvironmentFile=/etc/admitflow.env
+
+# Bound to loopback only; nginx (127.0.0.1:8088) is the way in. The bind address and worker
+# count here override the defaults in backend/deploy/gunicorn.conf.py (127.0.0.1:5000, 4
+# workers): port 5000 is the voice lab's on this machine, and 2 workers is plenty here.
+# Several processes are fine for this app, unlike the voice lab: its state is in PostgreSQL.
+ExecStart=/home/abhijith/admitflow/backend/.venv/bin/gunicorn \
+    -c deploy/gunicorn.conf.py \
+    --bind 127.0.0.1:5001 \
+    --workers 2 \
+    run:app
+
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+# Same shape as the voice lab's unit: the whole file system read-only, /home handed back
+# (the code, the venv, fontconfig's cache for PDF generation). The app writes no files of
+# its own: uploads go to MinIO and everything else to PostgreSQL.
+ProtectSystem=strict
+ProtectHome=false
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

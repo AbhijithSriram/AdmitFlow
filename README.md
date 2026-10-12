@@ -127,3 +127,27 @@ entirely on a local server. Paths below assume the repo is at `/var/www/admitflo
 
 Rate limiting is two-layer: Flask-Limiter (per Gunicorn worker) plus an Nginx `limit_req` zone on the login/signup
 endpoints, which is the shared cap that actually holds across all 4 workers.
+
+### On the homeserver (behind the Cloudflare tunnel)
+
+`deploy/homeserver/` deploys AdmitFlow the same way as the voice lab: a systemd service on localhost, secrets in
+`/etc/admitflow.env` generated on the box, files under `/srv/nas/admitflow`, and one hostname added to the existing
+tunnel (`https://admitflow.abhijith-sriram.in`). It also installs nginx and PostgreSQL if they are missing, and runs
+MinIO from a binary built from source (`docker/minio/Dockerfile`), because MinIO no longer publishes packages.
+
+```bash
+cd /home/abhijith/admitflow && git pull && sudo bash deploy/homeserver/install.sh
+```
+
+The script is idempotent, so re-running it is also the update path. Before the first run:
+
+1. Put the third-party keys in `/home/abhijith/.admitflow-secrets.env` (template: `deploy/homeserver/secrets.env.example`).
+2. Stage the MinIO binary at `/home/abhijith/.admitflow-stage/minio`.
+3. After it finishes, add the one DNS record it prints (the tunnel has no wildcard record).
+
+It uses ports 5001 (API), 8088 (nginx), 9000 and 9001 (file storage) and 5432 (database), all loopback-only, and
+refuses to start if a neighbour already holds one. Logs: `journalctl -u admitflow -f` and `journalctl -u admitflow-minio -f`.
+
+Two server-specific settings worth knowing about: `MINIO_PUBLIC_ENDPOINT` makes signed file links name the public
+host (a browser cannot open `127.0.0.1:9000`), and nginx reads the visitor's real address from Cloudflare's
+`CF-Connecting-IP` header, without which every visitor would share one login rate-limit bucket.

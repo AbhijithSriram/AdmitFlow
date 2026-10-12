@@ -1,0 +1,6 @@
+# Shell scripts and server configs run on Linux: a CRLF in them breaks the shebang line and
+# produces errors like "bash\r: No such file or directory", even when the file looks fine.
+*.sh text eol=lf
+*.service text eol=lf
+deploy/** text eol=lf
+nginx/** text eol=lf
