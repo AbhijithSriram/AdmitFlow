@@ -61,7 +61,7 @@ psql admitflow -f backend/migrations/002_admin_portal.sql   # admin sessions + a
 
 `schema.sql` already includes everything. **If your database was created before these changes**, run the
 migrations you have not applied yet (each is safe to re-run):
-`002_admin_portal.sql` (admin sessions and audit log) and `003_otp_attempts.sql` (counts wrong one-time-code guesses).
+`002_admin_portal.sql` (admin sessions and audit log), `003_otp_attempts.sql` (counts wrong one-time-code guesses) and `004_swap_programme_and_academic_steps.sql` (moves drafts saved before the programme became Step 3 and the academic details Step 4).
 
 ### 3. Backend
 

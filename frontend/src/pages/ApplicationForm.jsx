@@ -10,7 +10,7 @@ import FormStepNav from '../components/FormStepNav';
 import { useNavigate } from 'react-router-dom';
 import { apiClient, applicationApi } from '../api/client';
 import AppHeader from '../components/AppHeader';
-import { GUIDELINES } from '../content/institution';
+import { GUIDELINES, isUgProgramme } from '../content/institution';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useFormRehydrate } from '../hooks/useFormRehydrate';
 
@@ -146,6 +146,22 @@ function ApplicationFormBody() {
     }
   };
 
+  // Step 4 asks different questions for undergraduate and postgraduate programmes. If the student
+  // switches between the two, the answers saved for the other kind are cleared (and the step starts
+  // blank) instead of lingering in the draft, the PDF and the admin's view.
+  const resetAcademicIfLevelChanged = async (newProgramme) => {
+    const academic = draft['4'];
+    const previous = draft['3']?.programme;
+    if (!academic || Object.keys(academic).length === 0 || !previous) return;
+    if (isUgProgramme(previous) === isUgProgramme(newProgramme)) return;
+    try {
+      await applicationApi.saveDraftStep(applicationId, 4, {});
+      setDraft((prev) => ({ ...prev, 4: {} }));
+    } catch {
+      // Not fatal: Step 4 rebuilds its payload from the fields that apply when it is next saved.
+    }
+  };
+
   // Next: save the full step, advance ONLY if the save is confirmed (FR-6.2).
   const handleNext = async (stepData) => {
     if (busyRef.current) return;
@@ -162,6 +178,7 @@ function ApplicationFormBody() {
         return;
       }
       setDraft((prev) => ({ ...prev, [String(currentStep)]: stepData }));
+      if (currentStep === 3) await resetAcademicIfLevelChanged(stepData.programme);
       setCurrentStep((s) => Math.min(s + 1, 7));
     } finally {
       busyRef.current = false;
@@ -251,7 +268,13 @@ function ApplicationFormBody() {
         <FormStep3 {...common} initialData={stepData} onNext={handleNext} onBack={handleBack} />
       )}
       {currentStep === 4 && (
-        <FormStep4 {...common} initialData={stepData} onNext={handleNext} onBack={handleBack} />
+        <FormStep4
+          {...common}
+          initialData={stepData}
+          programme={draft['3']?.programme}
+          onNext={handleNext}
+          onBack={handleBack}
+        />
       )}
       {currentStep === 5 && (
         <FormStep5 {...common} initialData={stepData} onNext={handleNext} onBack={handleBack} />

@@ -7,13 +7,18 @@ export const INSTITUTION_NAME = 'AdmitFlow Institute'
 // Keep in sync with APPLICATION_FEE_PAISE in backend/app/blueprints/payment.py (100000 paise).
 export const APPLICATION_FEE_INR = 1000
 
-// programme -> specialisations offered under it (Step 4 dropdowns and the landing page).
+// programme -> specialisations offered under it (Step 3 dropdowns and the landing page).
 export const PROGRAMMES = {
   'B.Tech': ['CSE', 'IT', 'ECE', 'EEE', 'Mechanical', 'Civil'],
   'M.Tech': ['Computer Science', 'VLSI Design', 'Data Science', 'Structural Engineering'],
   MCA: ['General'],
   'M.Sc.': ['Computer Science', 'Mathematics', 'Physics', 'Data Science'],
 }
+
+// Undergraduate entry: applicants give their Class XII and Class X details. Every other programme is
+// postgraduate entry and also asks for the UG degree (Step 4 of the application form).
+export const UG_PROGRAMMES = ['B.Tech']
+export const isUgProgramme = (programme) => UG_PROGRAMMES.includes(programme)
 
 export const KEY_DATES = [
   { label: 'Applications open', value: '1 January' },

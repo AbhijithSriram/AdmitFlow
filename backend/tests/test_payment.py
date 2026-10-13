@@ -241,7 +241,7 @@ def test_form_data_is_grouped_by_step_so_repeated_field_names_survive(client, ma
     student = make_student(status="IN_PROGRESS", files=False)
     application = _application_of(student)
     FormDraft.query.filter_by(application_id=application.id).delete()
-    db.session.add(FormDraft(application_id=application.id, step_number=3, data={"score": "8.7"}))
+    db.session.add(FormDraft(application_id=application.id, step_number=4, data={"score": "8.7"}))
     db.session.add(FormDraft(application_id=application.id, step_number=5, data={"score": "88"}))
     db.session.commit()
 

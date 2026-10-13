@@ -1,93 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { stripFor, textError } from '../utils/textRules';
-
-const DEGREES = ['B.E.', 'B.Tech', 'B.Sc.', 'BCA', 'MCA', 'M.Sc.', 'Other'];
-const SPECIALISATIONS = [
-  'Computer Science', 'Information Technology', 'Electronics and Communication',
-  'Electrical and Electronics', 'Mechanical', 'Civil', 'Artificial Intelligence and Data Science',
-  'Mathematics', 'Physics', 'Chemistry', 'Statistics', 'Computer Applications',
-];
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-const STATUSES = ['Completed', 'Results Awaited'];
-const SCORE_TYPES = ['CGPA', 'Percentage'];
+import { PROGRAMMES } from '../content/institution';
 
 const inputCls = 'mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-2';
 
-// Hidden fields are excluded from the payload (FR-6.7 style).
 function buildPayload(f) {
-  const t = (v) => (typeof v === 'string' ? v.trim() : v);
-  const p = {
-    ug_degree: f.ug_degree,
-    ug_specialisation: t(f.ug_specialisation),
-    status: f.status,
-    college: t(f.college),
-    university: t(f.university),
-    passing_month: f.passing_month,
-    passing_year: t(f.passing_year),
-  };
-  if (f.ug_degree === 'Other') p.ug_degree_other = t(f.ug_degree_other);
-  if (f.status === 'Completed') {
-    p.score_type = f.score_type;
-    p.score = t(f.score);
-  }
-  return p;
+  return { programme: f.programme, specialisation: f.specialisation };
 }
 
-function validate(f) {
-  const e = {};
-  const req = (k, msg) => {
-    if (!String(f[k] ?? '').trim()) e[k] = msg;
-  };
-  req('ug_degree', 'UG degree is required');
-  if (f.ug_degree === 'Other') req('ug_degree_other', 'Enter your degree name');
-  req('ug_specialisation', 'Specialisation is required');
-  req('status', 'Status is required');
-  req('college', 'College is required');
-  req('university', 'University is required');
-  req('passing_month', 'Month is required');
-
-  const now = new Date();
-  const yearStr = String(f.passing_year || '').trim();
-  if (!yearStr) {
-    e.passing_year = 'Year is required';
-  } else if (!/^\d{4}$/.test(yearStr) || +yearStr < 1990 || +yearStr > now.getFullYear() + 6) {
-    e.passing_year = 'Enter a valid 4-digit year';
-  } else if (f.status === 'Completed' && f.passing_month) {
-    const m = MONTHS.indexOf(f.passing_month);
-    if (+yearStr > now.getFullYear() || (+yearStr === now.getFullYear() && m > now.getMonth())) {
-      e.passing_year = 'A completed degree cannot have a future passing date';
-    }
-  }
-
-  if (f.status === 'Completed') {
-    req('score_type', 'Score type is required');
-    const raw = String(f.score ?? '').trim();
-    if (!raw) {
-      e.score = 'Score is required';
-    } else if (f.score_type) {
-      const max = f.score_type === 'CGPA' ? 10 : 100;
-      const n = Number(raw);
-      if (!/^\d{1,3}(\.\d{1,2})?$/.test(raw) || !(n > 0) || n > max) {
-        e.score = `${f.score_type} must be a number above 0 and at most ${max}${f.score_type === 'CGPA' ? '.0' : ''}`;
-      }
-    }
-  }
-  const words = (k, kind, label) => {
-    if (!e[k] && textError(kind, f[k], label)) e[k] = textError(kind, f[k], label);
-  };
-  if (f.ug_degree === 'Other') words('ug_degree_other', 'subject', 'Degree name');
-  words('ug_specialisation', 'subject', 'Specialisation');
-  words('college', 'org', 'College');
-  words('university', 'org', 'University');
-  return e;
-}
-
-function Field({ label, required, error, className = '', children }) {
+function Field({ label, required, error, children }) {
   return (
-    <div className={className}>
+    <div>
       <label className="block text-sm font-medium text-gray-700">
         {label}
         {required && ' *'}
@@ -98,46 +20,32 @@ function Field({ label, required, error, className = '', children }) {
   );
 }
 
-export default function FormStep3({ initialData = {}, onNext, onBack, onAutoSave }) {
+export default function FormStep4({ initialData = {}, onNext, onBack, onAutoSave }) {
   const saved = initialData || {};
   const initial = {
-    ug_degree: saved.ug_degree ?? '',
-    ug_degree_other: saved.ug_degree_other ?? '',
-    ug_specialisation: saved.ug_specialisation ?? '',
-    status: saved.status ?? '',
-    college: saved.college ?? '',
-    university: saved.university ?? '',
-    passing_month: saved.passing_month ?? '',
-    passing_year: saved.passing_year ?? '',
-    score_type: saved.score_type ?? '',
-    score: saved.score ?? '',
+    programme: saved.programme ?? '',
+    specialisation: saved.specialisation ?? '',
   };
   const [f, setF] = useState(initial);
-  const fRef = useRef(initial); // always the latest values
+  const fRef = useRef(initial);
   const [errors, setErrors] = useState({});
 
-  const update = (patch, save = false) => {
+  const update = (patch) => {
     const next = { ...fRef.current, ...patch };
     fRef.current = next;
     setF(next);
-    if (save && onAutoSave) onAutoSave(buildPayload(next));
+    if (onAutoSave) onAutoSave(buildPayload(next));
   };
-  // `kind` (see utils/textRules.js) drops characters the box does not accept as they are typed.
-  const text = (name, kind) => ({
-    value: f[name],
-    onChange: (e) => update({ [name]: kind ? stripFor(kind, e.target.value) : e.target.value }),
-    onBlur: () => onAutoSave && onAutoSave(buildPayload(fRef.current)),
-    className: inputCls,
-  });
-  const select = (name, extra = {}) => ({
-    value: f[name],
-    onChange: (e) => update({ [name]: e.target.value, ...extra }, true),
-    className: inputCls,
-  });
+
+  const options = PROGRAMMES[f.programme] || [];
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const errs = validate(f);
+    const errs = {};
+    if (!f.programme) errs.programme = 'Programme is required';
+    if (!f.specialisation || !options.includes(f.specialisation)) {
+      errs.specialisation = 'Specialisation is required';
+    }
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
     onNext(buildPayload(f));
@@ -145,7 +53,7 @@ export default function FormStep3({ initialData = {}, onNext, onBack, onAutoSave
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-800">Step 3: Academic Details</h2>
+      <h2 className="text-xl font-bold text-gray-800">Step 3: Programme Preference</h2>
 
       {Object.keys(errors).length > 0 && (
         <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm">
@@ -154,77 +62,31 @@ export default function FormStep3({ initialData = {}, onNext, onBack, onAutoSave
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="UG Degree" required error={errors.ug_degree}>
-          <select {...select('ug_degree')}>
-            <option value="">Select Degree</option>
-            {DEGREES.map((d) => (
-              <option key={d} value={d}>{d}</option>
+        <Field label="Programme" required error={errors.programme}>
+          <select
+            value={f.programme}
+            onChange={(e) => update({ programme: e.target.value, specialisation: '' })}
+            className={inputCls}
+          >
+            <option value="">Select Programme</option>
+            {Object.keys(PROGRAMMES).map((p) => (
+              <option key={p} value={p}>{p}</option>
             ))}
           </select>
         </Field>
-        {f.ug_degree === 'Other' ? (
-          <Field label="Degree Name" required error={errors.ug_degree_other}>
-            <input type="text" {...text('ug_degree_other', 'subject')} />
-          </Field>
-        ) : (
-          <div className="hidden md:block" />
-        )}
-
-        <Field label="Specialisation" required error={errors.ug_specialisation}>
-          <input type="text" list="specialisation-options" {...text('ug_specialisation', 'subject')} />
-          <datalist id="specialisation-options">
-            {SPECIALISATIONS.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label="Status" required error={errors.status}>
-          <select {...select('status')}>
-            <option value="">Select Status</option>
-            {STATUSES.map((s) => (
+        <Field label="Specialisation" required error={errors.specialisation}>
+          <select
+            value={options.includes(f.specialisation) ? f.specialisation : ''}
+            onChange={(e) => update({ specialisation: e.target.value })}
+            disabled={!f.programme}
+            className={inputCls + (f.programme ? '' : ' bg-gray-100')}
+          >
+            <option value="">{f.programme ? 'Select Specialisation' : 'Select a programme first'}</option>
+            {options.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
         </Field>
-
-        <Field label="College" required error={errors.college}>
-          <input type="text" {...text('college', 'org')} />
-        </Field>
-        <Field label="University" required error={errors.university}>
-          <input type="text" {...text('university', 'org')} />
-        </Field>
-
-        <Field label="Month of Passing" required error={errors.passing_month}>
-          <select {...select('passing_month')}>
-            <option value="">Select Month</option>
-            {MONTHS.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Year of Passing" required error={errors.passing_year}>
-          <input type="text" inputMode="numeric" maxLength={4} {...text('passing_year')} />
-        </Field>
-
-        {f.status === 'Completed' && (
-          <>
-            <Field label="Score Type" required error={errors.score_type}>
-              <select {...select('score_type', { score: '' })}>
-                <option value="">Select Score Type</option>
-                {SCORE_TYPES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </Field>
-            <Field
-              label={f.score_type === 'Percentage' ? 'Percentage (max 100)' : f.score_type === 'CGPA' ? 'CGPA (max 10.0)' : 'Score'}
-              required
-              error={errors.score}
-            >
-              <input type="text" inputMode="decimal" {...text('score')} />
-            </Field>
-          </>
-        )}
       </div>
 
       <div className="flex justify-between pt-4">

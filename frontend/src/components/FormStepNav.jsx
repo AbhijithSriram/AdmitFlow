@@ -4,8 +4,8 @@ export default function FormStepNav({ currentStep, setCurrentStep }) {
   const steps = [
     { id: 1, label: 'Personal' },
     { id: 2, label: 'Address' },
-    { id: 3, label: 'Academic' },
-    { id: 4, label: 'Programme' },
+    { id: 3, label: 'Programme' },
+    { id: 4, label: 'Academic' },
     { id: 5, label: 'Entrance' },
     { id: 6, label: 'Documents' },
   ]

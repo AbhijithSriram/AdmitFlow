@@ -122,7 +122,7 @@ def test_programme_must_be_text(client, make_student):
     application = _application_of(student)
     _login_as(client, student)
 
-    resp = client.patch(f"/api/app/draft/{application.id}/step/4", json={"programme": {"nested": 1}})
+    resp = client.patch(f"/api/app/draft/{application.id}/step/3", json={"programme": {"nested": 1}})
 
     assert resp.status_code == 400
     assert db.session.get(Application, application.id).programme != {"nested": 1}
@@ -138,8 +138,10 @@ def test_programme_must_be_text(client, make_student):
     (2, "perm_district", "Chennai 600"),
     (2, "comm_state", "TN-7"),
     (2, "perm_town", "123"),
-    (3, "college", "98765"),
-    (3, "ug_specialisation", "CSE 2"),
+    (4, "college", "98765"),
+    (4, "ug_specialisation", "CSE 2"),
+    (4, "xii_school", "12345"),
+    (4, "x_school", "Chennai<b>"),
 ])
 def test_text_fields_refuse_digits_and_symbols(client, make_student, step, field, bad):
     student = make_student(status="IN_PROGRESS", files=False)
@@ -168,10 +170,27 @@ def test_real_names_and_places_are_accepted(client, make_student):
         "perm_town": "Sector 5", "perm_district": "Dadra & Nagar Haveli", "perm_state": "Tamil Nadu",
         "perm_country": "India", "perm_line1": "12/3, 4th Cross Street",   # address lines may hold numbers
     }).status_code == 200
-    assert client.patch(f"{url}/3", json={
+    assert client.patch(f"{url}/4", json={
         "college": "Anna University, Chennai - 25", "ug_specialisation": "Computer Science (AI)",
-        "score": "8.5", "passing_year": "2024",                          # numeric fields are untouched
+        "xii_school": "St. Joseph's Matriculation Hr. Sec. School", "x_school": "Government High School No. 2",
+        "score": "8.5", "passing_year": "2024", "xii_percentage": "91.5",   # numeric fields are untouched
     }).status_code == 200
+
+
+def test_the_programme_chosen_in_step_3_is_copied_onto_the_application(client, make_student):
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    resp = client.patch(f"/api/app/draft/{application.id}/step/3", json={"programme": "B.Tech", "specialisation": "CSE"})
+
+    assert resp.status_code == 200
+    saved = db.session.get(Application, application.id)
+    assert (saved.programme, saved.specialisation) == ("B.Tech", "CSE")
+    # Step 4 (academic details) must not touch it, whatever it carries.
+    client.patch(f"/api/app/draft/{application.id}/step/4", json={"programme": "MCA"})
+    db.session.expire_all()
+    assert db.session.get(Application, application.id).programme == "B.Tech"
 
 
 def test_empty_text_fields_are_still_saved(client, make_student):

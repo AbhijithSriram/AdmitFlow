@@ -4,7 +4,7 @@ import StatusBadge from '../../components/StatusBadge'
 import { humanize, isInternalKey } from '../../utils/fieldLabels'
 import { errorMessage, formatDate, formatDateTime } from './adminUtils'
 
-const STEP_TITLES = { 1: 'Personal details', 2: 'Address', 3: 'Academic details', 4: 'Programme preference', 5: 'Entrance / test details', 6: 'ID proof details' }
+const STEP_TITLES = { 1: 'Personal details', 2: 'Address', 3: 'Programme preference', 4: 'Academic details', 5: 'Entrance / test details', 6: 'ID proof details' }
 const DOC_LABELS = { photo: 'Photo', signature: 'Signature', id_proof: 'ID proof', application_pdf: 'Application PDF' }
 
 const show = (v) => {

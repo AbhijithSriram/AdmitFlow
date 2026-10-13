@@ -39,11 +39,14 @@ STEP_FIELD_KINDS = {
         **{f"{prefix}_town": "town" for prefix in ("perm", "comm")},
         **{f"{prefix}_{field}": "place" for prefix in ("perm", "comm") for field in ("district", "state", "country")},
     },
-    3: {
+    # Step 3 is the programme choice (dropdowns); step 4 holds the academic details.
+    4: {
         "ug_degree_other": "subject",
         "ug_specialisation": "subject",
         "college": "org",
         "university": "org",
+        "xii_school": "org",
+        "x_school": "org",
     },
 }
 

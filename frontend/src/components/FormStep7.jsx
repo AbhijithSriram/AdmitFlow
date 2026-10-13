@@ -13,8 +13,8 @@ import { display, flatten, humanize } from '../utils/fieldLabels'
 const STEP_TITLES = {
   1: 'Personal Details',
   2: 'Address Details',
-  3: 'Academic Details',
-  4: 'Programme Preference',
+  3: 'Programme Preference',
+  4: 'Academic Details',
   5: 'Entrance / Test Details',
   6: 'Documents',
 }

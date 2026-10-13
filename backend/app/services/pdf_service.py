@@ -45,7 +45,7 @@ def _flatten(data, prefix: str = ""):
 
 
 _WORDS = {
-    "ews": "EWS", "ug": "UG", "id": "ID", "cgpa": "CGPA",
+    "ews": "EWS", "ug": "UG", "id": "ID", "cgpa": "CGPA", "x": "Class X", "xii": "Class XII",
     "comm": "Communication", "perm": "Permanent", "line1": "line 1", "line2": "line 2",
 }
 

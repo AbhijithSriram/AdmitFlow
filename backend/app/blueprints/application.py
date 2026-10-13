@@ -176,7 +176,7 @@ def save_draft_step(application_id, step_number):
     if problem:
         return make_envelope(success=False, error=problem[1], code=400)
 
-    if step_number == 4:
+    if step_number == 3:
         for key in ("programme", "specialisation"):
             if key in payload and (not isinstance(payload[key], str) or len(payload[key]) > 255):
                 return make_envelope(
@@ -184,8 +184,8 @@ def save_draft_step(application_id, step_number):
                 )
 
     try:
-        # Step 4: Sync programme & specialisation directly to application record
-        if step_number == 4:
+        # Step 3: Sync programme & specialisation directly to application record
+        if step_number == 3:
             if "programme" in payload:
                 app.programme = payload["programme"]
             if "specialisation" in payload:
