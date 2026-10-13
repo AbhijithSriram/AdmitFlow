@@ -1,6 +1,8 @@
 // Client-side checks for the auth forms. These are for UX only — the backend
 // (blueprints/auth.py) re-validates everything and is the source of truth.
 
+import { textError } from './textRules'
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_PATTERN = /^\d{10}$/
 
@@ -24,7 +26,8 @@ export function validatePassword(password) {
 
 export function validateSignup(form) {
   const errors = {}
-  if (!form.fullName.trim()) errors.fullName = 'Enter your full name.'
+  const nameError = form.fullName.trim() ? textError('person', form.fullName, 'Full name') : 'Enter your full name.'
+  if (nameError) errors.fullName = nameError
   if (!form.dateOfBirth) {
     errors.dateOfBirth = 'Enter your date of birth.'
   } else if (new Date(form.dateOfBirth) > new Date()) {

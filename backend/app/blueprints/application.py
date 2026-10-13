@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.extensions import db
 from app.models import Application, FormDraft, Student
-from app.services import minio_service
+from app.services import field_rules, minio_service
 from app.middleware.auth_guard import login_required
 
 application_bp = Blueprint("application", __name__)
@@ -15,6 +15,19 @@ application_bp = Blueprint("application", __name__)
 # The largest step (Step 1 or 2) is well under 5 KB of JSON; this stops one step being used
 # to store megabytes per student.
 MAX_STEP_PAYLOAD_BYTES = 20 * 1024
+
+# Photo and signature may be any of the common web image formats (Pillow's own name for the format,
+# read from the file's contents, never from its filename) -> (extension, content type). A PNG of a
+# photograph rarely fits 500 KB; a JPEG does. Other formats (HEIC from some phones, TIFF, SVG) are
+# refused: browsers cannot show them in the admin's document viewer.
+IMAGE_FORMATS = {
+    "PNG": ("png", "image/png"),
+    "JPEG": ("jpg", "image/jpeg"),
+    "WEBP": ("webp", "image/webp"),
+    "GIF": ("gif", "image/gif"),
+    "BMP": ("bmp", "image/bmp"),
+}
+IMAGE_FORMAT_ERROR = "{} must be a JPEG, PNG, WebP, GIF or BMP image"
 
 
 def make_envelope(success=True, data=None, error=None, code=200):
@@ -159,6 +172,10 @@ def save_draft_step(application_id, step_number):
     if not isinstance(payload, dict):
         return make_envelope(success=False, error="Request body must be a JSON object", code=400)
 
+    problem = field_rules.step_text_error(step_number, payload)
+    if problem:
+        return make_envelope(success=False, error=problem[1], code=400)
+
     if step_number == 4:
         for key in ("programme", "specialisation"):
             if key in payload and (not isinstance(payload[key], str) or len(payload[key]) > 255):
@@ -226,8 +243,8 @@ def upload_document(application_id, doc_type):
             img = Image.open(BytesIO(file_bytes))
             img.verify()
             img = Image.open(BytesIO(file_bytes))
-            if img.format != "PNG":
-                return make_envelope(success=False, error="Photo must be PNG format", code=400)
+            if img.format not in IMAGE_FORMATS:
+                return make_envelope(success=False, error=IMAGE_FORMAT_ERROR.format("Photo"), code=400)
             w, h = img.size
             if not (150 <= w <= 600 and 200 <= h <= 800):
                 return make_envelope(
@@ -237,8 +254,7 @@ def upload_document(application_id, doc_type):
                 )
         except Exception:
             return make_envelope(success=False, error="Invalid photo image file", code=400)
-        ext = "png"
-        content_type = "image/png"
+        ext, content_type = IMAGE_FORMATS[img.format]
 
     elif doc_type == "signature":
         if file_size > 200 * 1024:
@@ -247,12 +263,11 @@ def upload_document(application_id, doc_type):
             img = Image.open(BytesIO(file_bytes))
             img.verify()
             img = Image.open(BytesIO(file_bytes))
-            if img.format != "PNG":
-                return make_envelope(success=False, error="Signature must be PNG format", code=400)
+            if img.format not in IMAGE_FORMATS:
+                return make_envelope(success=False, error=IMAGE_FORMAT_ERROR.format("Signature"), code=400)
         except Exception:
             return make_envelope(success=False, error="Invalid signature image file", code=400)
-        ext = "png"
-        content_type = "image/png"
+        ext, content_type = IMAGE_FORMATS[img.format]
 
     elif doc_type == "id_proof":
         if file_size > 2 * 1024 * 1024:

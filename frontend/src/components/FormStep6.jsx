@@ -3,6 +3,8 @@ import { applicationApi } from '../api/client';
 
 const ID_TYPES = ['Aadhaar', 'PAN', 'Voter ID'];
 const LIMITS = { photo: 500 * 1024, signature: 200 * 1024, id_proof: 2 * 1024 * 1024 };
+// Matches the formats the server accepts (backend/app/blueprints/application.py: IMAGE_FORMATS).
+const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,image/bmp';
 const LABELS = { photo: 'Photo', signature: 'Signature', id_proof: 'ID proof' };
 
 const inputCls = 'mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-2';
@@ -113,17 +115,17 @@ export default function FormStep6({
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            Applicant Photo * (PNG, 150x200 to 600x800 px, under 500 KB)
+            Applicant Photo * (JPEG or PNG, 150x200 to 600x800 px, under 500 KB)
           </label>
-          <FileButton accept="image/png" hasFile={!!photo} onChange={(e) => handleFileUpload(e, 'photo')} />
+          <FileButton accept={IMAGE_ACCEPT} hasFile={!!photo} onChange={(e) => handleFileUpload(e, 'photo')} />
           {uploading === 'photo' && <span className="text-xs text-blue-500">Uploading photo...</span>}
           {photo && <span className="text-xs text-green-600 block mt-1">✓ Photo uploaded ({photo.split('/').pop()})</span>}
           <Err k="photo" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Signature * (PNG, under 200 KB)</label>
-          <FileButton accept="image/png" hasFile={!!signature} onChange={(e) => handleFileUpload(e, 'signature')} />
+          <label className="block text-sm font-medium text-gray-700">Signature * (JPEG or PNG, under 200 KB)</label>
+          <FileButton accept={IMAGE_ACCEPT} hasFile={!!signature} onChange={(e) => handleFileUpload(e, 'signature')} />
           {uploading === 'signature' && <span className="text-xs text-blue-500">Uploading signature...</span>}
           {signature && <span className="text-xs text-green-600 block mt-1">✓ Signature uploaded ({signature.split('/').pop()})</span>}
           <Err k="signature" />

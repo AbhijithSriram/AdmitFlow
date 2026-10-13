@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, jsonify, request, session
 from app.extensions import bcrypt, db, limiter
 from app.middleware.auth_guard import login_required
 from app.models import OtpToken, Student
-from app.services import email_service, otp_service, recaptcha_service
+from app.services import email_service, field_rules, otp_service, recaptcha_service
 
 log = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
@@ -71,6 +71,8 @@ def _validate_signup(body: dict):
 
     if not full_name or len(full_name) > 255:
         return None, "Enter your full name.", "full_name"
+    if not field_rules.is_valid_text("person", full_name):
+        return None, "Full name can contain letters only.", "full_name"
     try:
         dob = datetime.strptime(_clean_str(body.get("date_of_birth")), "%Y-%m-%d").date()
     except ValueError:

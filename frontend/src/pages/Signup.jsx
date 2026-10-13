@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/client'
 import Recaptcha, { RECAPTCHA_SITE_KEY } from '../components/Recaptcha'
 import { GENDERS, validateSignup } from '../utils/authValidation'
+import { stripFor } from '../utils/textRules'
 
 const EMPTY_FORM = { fullName: '', dateOfBirth: '', gender: '', email: '', phone: '' }
 
@@ -73,7 +74,12 @@ export default function Signup() {
         <h1 className="text-2xl font-semibold">Create your account</h1>
 
         <Field label="Full name" error={errors.fullName}>
-          <input className={INPUT_CLASS} value={form.fullName} onChange={setField('fullName')} autoComplete="name" />
+          <input
+            className={INPUT_CLASS}
+            value={form.fullName}
+            onChange={(event) => setForm((prev) => ({ ...prev, fullName: stripFor('person', event.target.value) }))}
+            autoComplete="name"
+          />
         </Field>
 
         <Field label="Date of birth" error={errors.dateOfBirth}>

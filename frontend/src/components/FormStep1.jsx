@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { stripFor, textError } from '../utils/textRules';
 
 const STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
@@ -67,6 +68,17 @@ function validate(f) {
   if (String(f.guardian_relationship || '').trim() && !String(f.guardian_name || '').trim()) {
     e.guardian_name = 'Enter the guardian name or clear the relationship';
   }
+  // Text boxes that must hold words, not numbers (a required-ness error above takes priority).
+  const words = (k, kind, label) => {
+    if (!e[k] && textError(kind, f[k], label)) e[k] = textError(kind, f[k], label);
+  };
+  words('father_name', 'person', "Father's name");
+  words('mother_name', 'person', "Mother's name");
+  words('guardian_name', 'person', 'Guardian name');
+  words('guardian_relationship', 'person', 'Guardian relationship');
+  words('religion', 'person', 'Religion');
+  words('mother_tongue', 'person', 'Mother tongue');
+  if (f.nationality === 'NRI' || f.nationality === 'OCI') words('country', 'place', 'Country');
   return e;
 }
 
@@ -112,9 +124,10 @@ export default function FormStep1({ initialData = {}, profile, onNext, onAutoSav
     setF(next);
     if (saveNow && onAutoSave) onAutoSave(buildPayload(next));
   };
-  const text = (name) => ({
+  // `kind` (see utils/textRules.js) drops characters the box does not accept as they are typed.
+  const text = (name, kind) => ({
     value: f[name],
-    onChange: (e) => set(name, e.target.value),
+    onChange: (e) => set(name, kind ? stripFor(kind, e.target.value) : e.target.value),
     onBlur: () => onAutoSave && onAutoSave(buildPayload(f)),
     className: inputCls,
   });
@@ -163,20 +176,20 @@ export default function FormStep1({ initialData = {}, profile, onNext, onAutoSav
         <div className="hidden md:block" />
 
         <Field label="Father's Name" required error={errors.father_name}>
-          <input type="text" {...text('father_name')} />
+          <input type="text" {...text('father_name', 'person')} />
         </Field>
         <Field label="Mother's Name" required error={errors.mother_name}>
-          <input type="text" {...text('mother_name')} />
+          <input type="text" {...text('mother_name', 'person')} />
         </Field>
         <Field label="Guardian Name (optional)" error={errors.guardian_name}>
-          <input type="text" {...text('guardian_name')} />
+          <input type="text" {...text('guardian_name', 'person')} />
         </Field>
         <Field label="Guardian Relationship (optional)">
-          <input type="text" {...text('guardian_relationship')} />
+          <input type="text" {...text('guardian_relationship', 'person')} />
         </Field>
 
         <Field label="Religion" required error={errors.religion}>
-          <input type="text" {...text('religion')} />
+          <input type="text" {...text('religion', 'person')} />
         </Field>
         <Field label="Community" required error={errors.community}>
           <select {...select('community')}>
@@ -203,7 +216,7 @@ export default function FormStep1({ initialData = {}, profile, onNext, onAutoSav
           </div>
         </Field>
         <Field label="Mother Tongue" required error={errors.mother_tongue}>
-          <input type="text" {...text('mother_tongue')} />
+          <input type="text" {...text('mother_tongue', 'person')} />
         </Field>
 
         <Field label="Nationality" required error={errors.nationality}>
@@ -229,7 +242,7 @@ export default function FormStep1({ initialData = {}, profile, onNext, onAutoSav
         {isForeign && (
           <>
             <Field label="Country" required error={errors.country}>
-              <input type="text" {...text('country')} />
+              <input type="text" {...text('country', 'place')} />
             </Field>
             <Field label="Passport Number" required error={errors.passport_number}>
               <input type="text" {...text('passport_number')} />

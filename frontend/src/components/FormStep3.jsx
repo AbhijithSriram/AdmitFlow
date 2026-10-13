@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { stripFor, textError } from '../utils/textRules';
 
 const DEGREES = ['B.E.', 'B.Tech', 'B.Sc.', 'BCA', 'MCA', 'M.Sc.', 'Other'];
 const SPECIALISATIONS = [
@@ -74,6 +75,13 @@ function validate(f) {
       }
     }
   }
+  const words = (k, kind, label) => {
+    if (!e[k] && textError(kind, f[k], label)) e[k] = textError(kind, f[k], label);
+  };
+  if (f.ug_degree === 'Other') words('ug_degree_other', 'subject', 'Degree name');
+  words('ug_specialisation', 'subject', 'Specialisation');
+  words('college', 'org', 'College');
+  words('university', 'org', 'University');
   return e;
 }
 
@@ -114,9 +122,10 @@ export default function FormStep3({ initialData = {}, onNext, onBack, onAutoSave
     setF(next);
     if (save && onAutoSave) onAutoSave(buildPayload(next));
   };
-  const text = (name) => ({
+  // `kind` (see utils/textRules.js) drops characters the box does not accept as they are typed.
+  const text = (name, kind) => ({
     value: f[name],
-    onChange: (e) => update({ [name]: e.target.value }),
+    onChange: (e) => update({ [name]: kind ? stripFor(kind, e.target.value) : e.target.value }),
     onBlur: () => onAutoSave && onAutoSave(buildPayload(fRef.current)),
     className: inputCls,
   });
@@ -155,14 +164,14 @@ export default function FormStep3({ initialData = {}, onNext, onBack, onAutoSave
         </Field>
         {f.ug_degree === 'Other' ? (
           <Field label="Degree Name" required error={errors.ug_degree_other}>
-            <input type="text" {...text('ug_degree_other')} />
+            <input type="text" {...text('ug_degree_other', 'subject')} />
           </Field>
         ) : (
           <div className="hidden md:block" />
         )}
 
         <Field label="Specialisation" required error={errors.ug_specialisation}>
-          <input type="text" list="specialisation-options" {...text('ug_specialisation')} />
+          <input type="text" list="specialisation-options" {...text('ug_specialisation', 'subject')} />
           <datalist id="specialisation-options">
             {SPECIALISATIONS.map((s) => (
               <option key={s} value={s} />
@@ -179,10 +188,10 @@ export default function FormStep3({ initialData = {}, onNext, onBack, onAutoSave
         </Field>
 
         <Field label="College" required error={errors.college}>
-          <input type="text" {...text('college')} />
+          <input type="text" {...text('college', 'org')} />
         </Field>
         <Field label="University" required error={errors.university}>
-          <input type="text" {...text('university')} />
+          <input type="text" {...text('university', 'org')} />
         </Field>
 
         <Field label="Month of Passing" required error={errors.passing_month}>

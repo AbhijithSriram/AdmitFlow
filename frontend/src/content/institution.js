@@ -26,7 +26,7 @@ export const GUIDELINES = [
   'Please read these guidelines carefully before starting your application.',
   'All information you provide must be accurate and match your official documents.',
   'Your progress is saved automatically as you fill in each field.',
-  'You will need a passport-size photograph (PNG), a signature (PNG) and an ID proof (PDF).',
+  'You will need a passport-size photograph and a signature (JPEG or PNG images) and an ID proof (PDF).',
   'Applications cannot be edited after payment is completed.',
   'Providing false information may lead to cancellation of your application.',
   'The application fee is non-refundable.',

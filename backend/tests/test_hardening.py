@@ -2,6 +2,7 @@
 import datetime
 import io
 
+import pytest
 from PIL import Image
 
 from app.extensions import db
@@ -127,6 +128,70 @@ def test_programme_must_be_text(client, make_student):
     assert db.session.get(Application, application.id).programme != {"nested": 1}
 
 
+# ------------------------------------------- text-only fields refuse digits and symbols
+@pytest.mark.parametrize("step, field, bad", [
+    (1, "father_name", "Vijayakumar 2"),
+    (1, "mother_name", "Krishna<script>"),
+    (1, "religion", "Hindu1"),
+    (1, "mother_tongue", "12345"),
+    (1, "country", "Country 9"),
+    (2, "perm_district", "Chennai 600"),
+    (2, "comm_state", "TN-7"),
+    (2, "perm_town", "123"),
+    (3, "college", "98765"),
+    (3, "ug_specialisation", "CSE 2"),
+])
+def test_text_fields_refuse_digits_and_symbols(client, make_student, step, field, bad):
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    resp = client.patch(f"/api/app/draft/{application.id}/step/{step}", json={field: bad})
+
+    assert resp.status_code == 400
+    assert "can contain" in resp.json["error"]
+    saved = FormDraft.query.filter_by(application_id=application.id, step_number=step).first()
+    assert saved is None or (saved.data or {}).get(field) != bad
+
+
+def test_real_names_and_places_are_accepted(client, make_student):
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+    url = f"/api/app/draft/{application.id}/step"
+
+    assert client.patch(f"{url}/1", json={
+        "father_name": "K. Vijaya-Kumar", "mother_name": "Krishnapriya", "guardian_name": "D'Souza",
+        "religion": "Hindu", "mother_tongue": "தமிழ்", "country": "United States (USA)",
+    }).status_code == 200
+    assert client.patch(f"{url}/2", json={
+        "perm_town": "Sector 5", "perm_district": "Dadra & Nagar Haveli", "perm_state": "Tamil Nadu",
+        "perm_country": "India", "perm_line1": "12/3, 4th Cross Street",   # address lines may hold numbers
+    }).status_code == 200
+    assert client.patch(f"{url}/3", json={
+        "college": "Anna University, Chennai - 25", "ug_specialisation": "Computer Science (AI)",
+        "score": "8.5", "passing_year": "2024",                          # numeric fields are untouched
+    }).status_code == 200
+
+
+def test_empty_text_fields_are_still_saved(client, make_student):
+    """Autosave sends half-filled steps; an empty box is not an invalid one."""
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    resp = client.patch(f"/api/app/draft/{application.id}/step/1", json={"father_name": "", "guardian_name": ""})
+
+    assert resp.status_code == 200
+
+
+def test_signup_refuses_a_name_with_digits(client):
+    resp = _signup(client, full_name="Real Owner 2")
+
+    assert resp.status_code == 400 and resp.json["field"] == "full_name"
+    assert Student.query.filter_by(email="real.owner@example.com").count() == 0
+
+
 def test_a_save_failure_does_not_leak_internals(client, make_student, monkeypatch):
     student = make_student(status="IN_PROGRESS", files=False)
     application = _application_of(student)
@@ -165,3 +230,93 @@ def test_a_storage_failure_does_not_leak_internals(client, make_student, monkeyp
     assert resp.status_code == 502
     assert "AKIA-SECRET" not in resp.get_data(as_text=True)
     assert "10.0.0.5" not in resp.get_data(as_text=True)
+
+
+# ------------------------------------------------- photo and signature: any common image format
+def _image(fmt, width=300, height=400, colour=(20, 90, 160)):
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), colour).save(buf, fmt)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("fmt, ext, content_type", [
+    ("PNG", "png", "image/png"),
+    ("JPEG", "jpg", "image/jpeg"),
+    ("WEBP", "webp", "image/webp"),
+    ("GIF", "gif", "image/gif"),
+    ("BMP", "bmp", "image/bmp"),
+])
+@pytest.mark.parametrize("doc_type", ["photo", "signature"])
+def test_photo_and_signature_accept_common_image_formats(client, make_student, monkeypatch, fmt, ext, content_type, doc_type):
+    from app.services import minio_service
+
+    size = (300, 400) if doc_type == "photo" else (200, 80)   # an uncompressed BMP signature must stay under 200 KB
+    stored = {}
+    monkeypatch.setattr(minio_service, "upload_object", lambda name, data, ctype: stored.update(name=name, ctype=ctype))
+    monkeypatch.setattr(minio_service, "delete_object", lambda name: None)
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    resp = client.post(
+        f"/api/app/upload/{application.id}/{doc_type}",
+        data={"file": (io.BytesIO(_image(fmt, *size)), "whatever.bin")},   # the filename is irrelevant: the contents decide
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 200
+    assert stored["name"] == f"applications/{application.id}/{doc_type}.{ext}"
+    assert stored["ctype"] == content_type
+    assert getattr(db.session.get(Application, application.id), f"{doc_type}_url") == stored["name"]
+
+
+@pytest.mark.parametrize("fmt", ["TIFF", "ICO"])
+def test_unsupported_image_formats_are_still_refused(client, make_student, monkeypatch, fmt):
+    from app.services import minio_service
+
+    monkeypatch.setattr(minio_service, "upload_object", lambda *a, **k: pytest.fail("must not be stored"))
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    resp = client.post(
+        f"/api/app/upload/{application.id}/photo",
+        data={"file": (io.BytesIO(_image(fmt, 256, 256)), "photo.jpg")},   # a TIFF named .jpg is still a TIFF
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 400 and "JPEG, PNG, WebP, GIF or BMP" in resp.json["error"]
+
+
+def test_a_non_image_named_jpg_is_refused(client, make_student):
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _application_of(student)
+    _login_as(client, student)
+
+    resp = client.post(
+        f"/api/app/upload/{application.id}/photo",
+        data={"file": (io.BytesIO(b"<html><script>alert(1)</script></html>"), "photo.jpg")},
+        content_type="multipart/form-data",
+    )
+
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize("fmt, mime", [
+    ("PNG", "image/png"), ("JPEG", "image/jpeg"), ("WEBP", "image/webp"), ("GIF", "image/gif"), ("BMP", "image/bmp"),
+])
+def test_the_application_pdf_embeds_every_accepted_format(fmt, mime):
+    import base64
+
+    from app.services import pdf_service
+
+    # Two different pictures: WeasyPrint stores identical ones once.
+    photo = f"data:{mime};base64," + base64.b64encode(_image(fmt)).decode()
+    signature = f"data:{mime};base64," + base64.b64encode(_image(fmt, 200, 80, (200, 30, 30))).decode()
+    pdf = pdf_service.render_application_pdf({
+        "photo_url": photo, "signature_url": signature, "full_name": "Real Owner", "programme": "MCA",
+        "payment_reference": "pay_x", "form_data": {},
+    })
+
+    assert pdf.startswith(b"%PDF")
+    assert pdf.count(b"/Subtype /Image") >= 2   # photo and signature both made it in
