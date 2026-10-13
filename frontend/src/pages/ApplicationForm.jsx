@@ -19,40 +19,31 @@ function isPlainObject(v) {
 }
 
 function Guidelines({ onAgree, busy, error }) {
-  const boxRef = useRef(null);
-  const [atBottom, setAtBottom] = useState(false);
-
-  const check = () => {
-    const el = boxRef.current;
-    if (!el) return;
-    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 1) setAtBottom(true);
-  };
-
-  useEffect(() => {
-    check(); // short content that never needs scrolling
-  }, []);
+  const [understood, setUnderstood] = useState(false);
 
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-800">Application Guidelines</h2>
-      <div
-        ref={boxRef}
-        onScroll={check}
-        className="h-24 overflow-y-auto border rounded-md p-4 bg-gray-50 space-y-3 text-sm text-gray-700"
-      >
+      <ol className="border rounded-md p-4 bg-gray-50 space-y-3 text-sm text-gray-700 list-decimal list-inside">
         {GUIDELINES.map((line, i) => (
-          <p key={i}>{i + 1}. {line}</p>
+          <li key={i}>{line}</li>
         ))}
-      </div>
-      {!atBottom && (
-        <p className="text-xs text-gray-500">Scroll to the bottom to enable the button.</p>
-      )}
+      </ol>
+      <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={understood}
+          onChange={(e) => setUnderstood(e.target.checked)}
+          className="mt-0.5 h-4 w-4"
+        />
+        <span>I have read and understood the guidelines above.</span>
+      </label>
       {error && <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm">{error}</div>}
       <div className="flex justify-end">
         <button
           type="button"
           onClick={onAgree}
-          disabled={!atBottom || busy}
+          disabled={!understood || busy}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {busy ? 'Starting…' : 'I Agree & Proceed'}
