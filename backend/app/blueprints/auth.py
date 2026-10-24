@@ -177,6 +177,7 @@ def send_otp():
         log.exception("could not send OTP email student_id=%s", student.id)
         return _fail("We couldn't send the email right now. Please try again shortly.", 503)
 
+    log.info("otp sent student_id=%s purpose=%s", student.id, purpose)
     return _ok(generic)
 
 
@@ -261,10 +262,12 @@ def login():
 
     if student is None or student.password_hash is None or not student.email_verified:
         _burn_bcrypt_time(password)
+        log.warning("login failed: no verified account with a password for that email")
         return bad_credentials
 
     if student.locked_until is not None and student.locked_until > now:
         minutes = int((student.locked_until - now).total_seconds() // 60) + 1
+        log.warning("login refused, account locked student_id=%s", student.id)
         return _fail(f"Too many failed attempts. Try again in {minutes} minute(s).", 423)
 
     if student.locked_until is not None:  # lock has expired: start counting from zero again
@@ -273,6 +276,7 @@ def login():
 
     if not bcrypt.check_password_hash(student.password_hash, password):
         student.failed_login_attempts += 1
+        log.warning("login failed student_id=%s attempt=%s", student.id, student.failed_login_attempts)
         if student.failed_login_attempts >= cfg["LOGIN_LOCKOUT_ATTEMPTS"]:
             student.locked_until = now + timedelta(minutes=cfg["LOGIN_LOCKOUT_MINUTES"])
             student.failed_login_attempts = 0
@@ -306,5 +310,6 @@ def me():
 @login_required
 def logout():
     """Invalidate the current student session."""
+    log.info("student logout student_id=%s", session["student_id"])
     session.clear()
     return _ok({"message": "Logged out."})
