@@ -36,14 +36,24 @@ def create_app(config_name: str | None = None) -> Flask:
 
 def register_blueprints(app: Flask) -> None:
     from app.blueprints.admin import admin_bp
+    from app.blueprints.admin_export import admin_export_bp
+    from app.blueprints.admin_stats import admin_stats_bp
+    from app.blueprints.admin_tests import admin_tests_bp
     from app.blueprints.application import application_bp
     from app.blueprints.auth import auth_bp
     from app.blueprints.payment import payment_bp
+    from app.blueprints.student_tests import student_tests_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(application_bp, url_prefix="/api")
     app.register_blueprint(payment_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
+    # Extension modules (REMAINING_WORK.md). The admin cookie is scoped to /api/admin, so every
+    # admin-side route must live under that prefix.
+    app.register_blueprint(admin_tests_bp, url_prefix="/api/admin/tests")
+    app.register_blueprint(admin_stats_bp, url_prefix="/api/admin")
+    app.register_blueprint(admin_export_bp, url_prefix="/api/admin/export")
+    app.register_blueprint(student_tests_bp, url_prefix="/api/student/tests")
 
 
 def register_security_headers(app: Flask) -> None:

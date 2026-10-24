@@ -41,9 +41,10 @@ Back-button navigation, rate-limit storage), content/documentation, and operatio
 
 ---
 
-## 2. Decisions to make together BEFORE starting
+## 2. Decisions that change what people build
 
-These change what people build. Settle them in one 20-minute call and write the answers at the bottom of this file.
+These are **settled**: the recommended option was approved, and the answers are recorded in section 7. They are kept
+here with their reasoning so you can see why.
 
 1. **Marks:** does every question carry equal marks? *Recommended:* each question has its own `marks` (default 1), and
    `total_marks` must equal their sum when the paper is published.
@@ -122,12 +123,26 @@ CREATE TABLE IF NOT EXISTS programme_seats (
 | GET | `/api/admin/export/applicants.csv` | Same filter parameters as `/api/admin/students` |
 | GET | `/api/admin/export/applicants.pdf` | Same, rendered with WeasyPrint |
 
-### 3.3 Step 0 — scaffold (Person 3, before anyone starts; about an hour)
+### 3.3 Step 0 — scaffold (DONE)
 
-To avoid the shared-file conflicts from last time, Person 3 pushes one small commit first that: creates empty
-blueprints `admin_tests.py`, `student_tests.py`, `admin_stats.py`, `admin_export.py` and registers them in
-`app/__init__.py`; adds the frontend routes `/tests`, `/tests/:id`, `/admin/tests`, `/admin/stats` to `App.jsx`
-with placeholder pages; and adds the API functions to `api/client.js`. After that nobody touches those three files.
+To avoid the shared-file conflicts from last time, one scaffold commit already did the shared edits. After it,
+**nobody edits `app/__init__.py`, `App.jsx` or `api/client.js`** for this work; you only replace the stubs in the
+files you own below.
+
+- **Backend stubs** (each route exists, is behind the right guard, and answers `501 Not implemented`), registered in
+  `app/__init__.py`: `admin_tests.py` → `/api/admin/tests` (P4), `student_tests.py` → `/api/student/tests` (P1),
+  `admin_stats.py` → `/api/admin/stats/*` and `/api/admin/seats` (P2), `admin_export.py` → `/api/admin/export/*` (P3).
+  Admin routes must stay under `/api/admin`, because the admin session cookie is only sent to that path.
+- **Frontend placeholders and routes** in `App.jsx`: `/tests` (`Tests.jsx`) and `/tests/:paperId` (`TakeTest.jsx`) (P1);
+  `/admin/tests` (`AdminTests.jsx`), `/admin/tests/new` and `/admin/tests/:paperId` (`TestEditor.jsx`) (P4);
+  `/admin/stats` (`AdminStats.jsx`) (P2). `TestsCard.jsx` (P1) is already mounted in the student dashboard for PAID
+  applicants and renders nothing until it is built.
+- **API client functions** already in `api/client.js`: `studentTestsApi`, `adminTestsApi`, `adminStatsApi`,
+  `adminExportApi`. Use them as they are; if a signature is wrong for you, tell the group rather than editing it.
+- **`backend/tests/test_extension_scaffold.py`** pins the guard behaviour of every new route. Keep the "needs a session"
+  tests when you implement a route; only replace the "answers 501" test of your routes with real tests.
+
+The two migration files (`005`, `006`) are not part of the scaffold: their owners write them (section 3.1).
 
 ---
 
@@ -160,7 +175,8 @@ backend/app/blueprints/auth.py                   (audit logging only)
 5. **`submit` + auto-submit.** At 0:00 the page submits whatever is selected. Also handle the browser being closed:
    when `/student/tests` or `start` is called after the deadline for an unsubmitted test, grade it then ("lazy submit").
 6. **`TakeTest.jsx`:** question navigator, countdown, a confirmation before manual submit, a warning at 1 minute left.
-7. **`TestsCard.jsx`:** list assigned tests on the dashboard. Person 3 adds one `<TestsCard />` line to `Dashboard.jsx`.
+7. **`TestsCard.jsx`:** list assigned tests on the dashboard. It is already mounted in `Dashboard.jsx` (for PAID
+   applicants), so you only edit your own file.
 8. **Audit logging (NFR-6):** add `log.info`/`log.warning` lines in `auth.py` for OTP dispatch, login failure
    (log the student id, never the email or password), logout. Extend the redaction test so a password or OTP in a
    log line is caught.
@@ -225,7 +241,7 @@ deploy/homeserver/*, README.md, SRD change log
 ```
 
 **Build order:**
-1. **Step 0 scaffold** (section 3.3). Do this first.
+1. **Step 0 scaffold** (section 3.3): done.
 2. **Retry Payment (FR-5):** when the dashboard status is `PAYMENT_PENDING`, show a "Retry Payment" button that
    opens the payment step. Test the whole failure path: dismiss the Razorpay modal, check the badge and the button.
 3. **Payment logging (NFR-6):** `INFO` lines for payment order created and payment confirmed (order id and application
@@ -306,19 +322,24 @@ submissions and says so.
 
 | Phase | Who | What |
 |---|---|---|
-| Day 1 | Person 3 | Step 0 scaffold |
-| Day 1 | Person 4 | Migration 005 merged |
-| Day 1 | Everyone | The decisions call (section 2) |
+| Done | Person 3 | Step 0 scaffold; the decisions in section 7 |
+| Day 1 | Person 4 | Migration 005 merged (Person 1 depends on it) |
 | Week 1 | P1 / P2 / P3 / P4 | Each builds their own slice against stub data |
 | Week 2 | P1 + P4 | Integrate: assign a real test and take it end to end |
 | Week 2 | P2 + P3 | Integrate: export uses P4's query builder; stats and export agree on the same numbers |
 | Week 3 | Everyone | Live verification checklist, documentation, demo rehearsal |
 
-## 7. Decisions (fill in after the call)
+## 7. Decisions (settled)
 
-1. Marks per question:
-2. Retakes:
-3. Students see scores:
-4. "Shortlisted" means:
-5. Seat numbers:
-6. SRD v1.1 deviations accepted:
+Approved by Abhijith (Person 3) on 24 October 2026; the other three should read them before starting. If you disagree,
+raise it now, because they decide what gets built.
+
+1. **Marks per question:** each question has its own `marks` (default 1); `total_marks` must equal their sum when the
+   paper is published.
+2. **Retakes:** one attempt per student per test. An admin can reset an attempt (`POST .../reset/:application_id`).
+3. **Students see scores:** no. Only admins see them.
+4. **"Shortlisted" means:** a PAID application whose aptitude score is at or above the test's pass marks. With no test
+   assigned it shows 0.
+5. **Seat numbers:** an admin-editable table (`programme_seats`, migration 006, built by Person 2), seeded with demo values.
+6. **SRD v1.1:** the deviations listed in section 1 (guidelines checkbox, non-PNG photos and signatures, programme before
+   academic details) are accepted. Person 3 records them in the SRD.

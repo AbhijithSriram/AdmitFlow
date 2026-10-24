@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { applicationApi, studentApi } from '../api/client'
 import AppHeader from '../components/AppHeader'
 import StatusBadge from '../components/StatusBadge'
+import TestsCard from '../components/TestsCard'
 
 // FR-5: applicant dashboard — status badge, quick actions, navigation links.
 export default function Dashboard() {
@@ -82,6 +83,9 @@ export default function Dashboard() {
         </div>
 
         {receiptError && <p className="text-red-600 text-sm mt-2">{receiptError}</p>}
+
+        {/* Assigned aptitude tests (FR-10). Renders nothing until Person 1 builds it. */}
+        {status === 'PAID' && <TestsCard />}
 
         <nav className="flex flex-wrap gap-4 mt-8 text-sm text-gray-600">
           <Link to="/info/eligibility" className="underline">

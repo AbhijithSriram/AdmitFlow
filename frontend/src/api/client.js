@@ -49,6 +49,44 @@ export const applicationApi = {
   getReceipt: (applicationId) => apiClient.get(`/api/app/receipt/${applicationId}`),
 }
 
+// Aptitude test, applicant side (SRD FR-10). Contract: REMAINING_WORK.md section 3.2.
+export const studentTestsApi = {
+  list: () => apiClient.get('/api/student/tests'),
+  start: (paperId) => apiClient.post(`/api/student/tests/${paperId}/start`),
+  saveAnswers: (paperId, answers) => apiClient.put(`/api/student/tests/${paperId}/answers`, { answers }),
+  submit: (paperId) => apiClient.post(`/api/student/tests/${paperId}/submit`),
+}
+
+// Aptitude test, admin side (SRD FR-10).
+export const adminTestsApi = {
+  list: () => apiClient.get('/api/admin/tests'),
+  create: (payload) => apiClient.post('/api/admin/tests', payload),
+  get: (paperId) => apiClient.get(`/api/admin/tests/${paperId}`),
+  update: (paperId, payload) => apiClient.put(`/api/admin/tests/${paperId}`, payload),
+  remove: (paperId) => apiClient.delete(`/api/admin/tests/${paperId}`),
+  publish: (paperId) => apiClient.post(`/api/admin/tests/${paperId}/publish`),
+  assign: (paperId, filters) => apiClient.post(`/api/admin/tests/${paperId}/assign`, filters ?? {}),
+  results: (paperId, params) => apiClient.get(`/api/admin/tests/${paperId}/results`, { params }),
+  resetAttempt: (paperId, applicationId) =>
+    apiClient.post(`/api/admin/tests/${paperId}/reset/${applicationId}`),
+}
+
+// ERP statistics view (SRD FR-11).
+export const adminStatsApi = {
+  summary: () => apiClient.get('/api/admin/stats/summary'),
+  programmes: () => apiClient.get('/api/admin/stats/programmes'),
+  registrations: (params) => apiClient.get('/api/admin/stats/registrations', { params }),
+  getSeats: () => apiClient.get('/api/admin/seats'),
+  setSeats: (seats) => apiClient.put('/api/admin/seats', { seats }),
+}
+
+// Applicant data export (SRD FR-11). `params` are the same filters as adminApi.listStudents.
+// A download, so the response is a Blob: the caller saves it (URL.createObjectURL).
+export const adminExportApi = {
+  csv: (params) => apiClient.get('/api/admin/export/applicants.csv', { params, responseType: 'blob' }),
+  pdf: (params) => apiClient.get('/api/admin/export/applicants.pdf', { params, responseType: 'blob' }),
+}
+
 export const adminApi = {
   login: (payload) => apiClient.post('/api/admin/login', payload),
   logout: () => apiClient.post('/api/admin/logout'),

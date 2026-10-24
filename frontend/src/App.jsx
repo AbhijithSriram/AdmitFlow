@@ -2,6 +2,9 @@ import { Route, Routes } from 'react-router-dom'
 import RequireAuth from './components/RequireAuth'
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminLogin from './pages/Admin/AdminLogin'
+import AdminStats from './pages/Admin/AdminStats'
+import AdminTests from './pages/Admin/AdminTests'
+import TestEditor from './pages/Admin/TestEditor'
 import ApplicationForm from './pages/ApplicationForm'
 import Dashboard from './pages/Dashboard'
 import InfoPage from './pages/InfoPage'
@@ -10,6 +13,8 @@ import Login from './pages/Login'
 import OtpVerification from './pages/OtpVerification'
 import SetPassword from './pages/SetPassword'
 import Signup from './pages/Signup'
+import TakeTest from './pages/TakeTest'
+import Tests from './pages/Tests'
 
 export default function App() {
   return (
@@ -36,8 +41,28 @@ export default function App() {
           </RequireAuth>
         }
       />
+      <Route
+        path="/tests"
+        element={
+          <RequireAuth>
+            <Tests />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/tests/:paperId"
+        element={
+          <RequireAuth>
+            <TakeTest />
+          </RequireAuth>
+        }
+      />
       <Route path="/admin/auth" element={<AdminLogin />} />
       <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      <Route path="/admin/tests" element={<AdminTests />} />
+      <Route path="/admin/tests/new" element={<TestEditor />} />
+      <Route path="/admin/tests/:paperId" element={<TestEditor />} />
+      <Route path="/admin/stats" element={<AdminStats />} />
     </Routes>
   )
 }
