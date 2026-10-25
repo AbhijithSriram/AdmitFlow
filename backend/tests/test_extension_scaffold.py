@@ -61,17 +61,4 @@ def test_admin_stubs_answer_501_to_an_admin(logged_in, method, path):
     assert resp.json == {"success": False, "error": "Not implemented"}
 
 
-# GET /api/student/tests, start and answers are implemented: see test_student_tests.py.
-STUDENT_STUB_ROUTES = [
-    ("POST", "/api/student/tests/p1/submit"),
-]
-
-
-@pytest.mark.parametrize("method, path", STUDENT_STUB_ROUTES)
-def test_student_stubs_answer_501_to_a_student(client, make_student, method, path):
-    student = make_student()
-    with client.session_transaction() as sess:
-        sess["student_id"] = student.id
-    resp = client.open(path, method=method)
-    assert resp.status_code == 501
-    assert resp.json == {"success": False, "error": "Not implemented"}
+# Every student route is implemented now: their behaviour is tested in test_student_tests.py.

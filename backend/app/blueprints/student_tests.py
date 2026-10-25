@@ -29,10 +29,6 @@ def _fail(message, status):
     return jsonify({"success": False, "error": message}), status
 
 
-def _not_implemented():
-    return _fail("Not implemented", 501)
-
-
 def _iso_utc(value):
     """The server stores naive UTC; the trailing Z tells the browser so its countdown is right."""
     return value.isoformat() + "Z" if value else None
@@ -183,5 +179,29 @@ def save_answers(paper_id):
 @student_tests_bp.route("/<paper_id>/submit", methods=["POST"])
 @login_required
 def submit_test(paper_id):
-    """Grade the saved answers, store the score and set submitted_at."""
-    return _not_implemented()
+    """Grade the saved answers, store the score and set submitted_at. Allowed once. A submit that
+    arrives after the deadline (the page's own auto-submit, a moment late) still closes the
+    attempt, graded on the answers saved in time. The score is never sent back (decision 3)."""
+    application = _paid_application()
+    if application is None:
+        return _fail(NOT_PAID, 403)
+
+    found = _locked_assignment(application, paper_id)
+    if found is None:
+        return _fail("Test not found.", 404)
+    sub, paper = found
+
+    if sub.submitted_at is not None:
+        db.session.commit()  # release the row lock
+        return _fail("You have already submitted this test.", 409)
+    if sub.started_at is None:
+        db.session.commit()
+        return _fail("Start the test before submitting it.", 409)
+
+    now = datetime.utcnow()
+    if not test_service.finalise_if_expired(sub, paper, now):
+        sub.score = test_service.grade(paper, sub.answers)
+        sub.submitted_at = now
+    db.session.commit()
+    log.info("test submitted paper_id=%s application_id=%s", paper.id, application.id)
+    return _ok({"status": test_service.status(sub), "submitted_at": _iso_utc(sub.submitted_at)})

@@ -312,3 +312,117 @@ def test_save_is_only_for_paid_applicants(make_student, sign_in, make_paper, ass
     paper = make_paper()
     assign(student, paper, started_at=datetime.utcnow())
     assert _save(sign_in(student), paper.id, {str(paper.questions[0].id): "A"}).status_code == 403
+
+
+# --- POST /api/student/tests/:paper_id/submit -------------------------------------------------
+
+def _submit(client, paper_id):
+    return client.post(f"/api/student/tests/{paper_id}/submit")
+
+
+def test_submit_grades_the_saved_answers_and_closes_the_attempt(paid, sign_in, started):
+    paper, sub, q1, q2 = started  # answer q1 correctly and q2 wrongly
+    client = sign_in(paid)
+    correct = {str(q.id): q.correct_option for q in paper.questions}
+    _save(client, paper.id, {q1: correct[q1], q2: "D" if correct[q2] != "D" else "C"})
+    before = datetime.utcnow()
+    r = _submit(client, paper.id)
+    assert r.status_code == 200
+    sub = _reload(sub)
+    expected = next(q.marks for q in paper.questions if str(q.id) == q1)
+    assert sub.score == expected
+    assert before <= sub.submitted_at <= datetime.utcnow()
+
+
+def test_submit_never_sends_the_score_back(paid, sign_in, started):
+    paper, sub, q1, _ = started
+    client = sign_in(paid)
+    _save(client, paper.id, {q1: "A"})
+    r = _submit(client, paper.id)
+    assert r.json["data"] == {"status": "SUBMITTED", "submitted_at": r.json["data"]["submitted_at"]}
+    assert r.json["data"]["submitted_at"].endswith("Z")
+    assert "score" not in json.dumps(r.json) and "marks" not in json.dumps(r.json)
+
+
+def test_a_second_submit_is_refused_and_the_score_is_unchanged(paid, sign_in, started):
+    paper, sub, q1, _ = started
+    client = sign_in(paid)
+    _save(client, paper.id, {q1: "A"})
+    _submit(client, paper.id)
+    first = _reload(sub)
+    score, submitted_at = first.score, first.submitted_at
+    r = _submit(client, paper.id)
+    assert r.status_code == 409 and r.json["success"] is False
+    sub = _reload(sub)
+    assert sub.score == score and sub.submitted_at == submitted_at
+
+
+def test_answers_cannot_change_after_submitting(paid, sign_in, started):
+    paper, sub, q1, _ = started
+    client = sign_in(paid)
+    _save(client, paper.id, {q1: "A"})
+    _submit(client, paper.id)
+    assert _save(client, paper.id, {q1: "B"}).status_code == 409
+    assert _reload(sub).answers == {q1: "A"}
+
+
+def test_a_late_submit_grades_only_the_answers_saved_in_time(paid, sign_in, make_paper, assign):
+    paper = make_paper(duration=30, answers=(("A", 1), ("A", 2)))
+    q1, q2 = (str(q.id) for q in paper.questions)
+    started_at = datetime.utcnow() - timedelta(minutes=31)
+    sub = assign(paid, paper, started_at=started_at, answers={q1: "A"})  # saved before time ran out
+    client = sign_in(paid)
+    assert _save(client, paper.id, {q2: "A"}).status_code == 409  # too late: refused, and closes the attempt
+    sub = _reload(sub)
+    assert sub.score == 1 and sub.submitted_at == started_at + timedelta(minutes=30)
+    assert _submit(client, paper.id).status_code == 409  # already closed by the refused save
+
+
+def test_the_auto_submit_arriving_just_after_the_deadline_is_accepted(paid, sign_in, make_paper, assign):
+    paper = make_paper(duration=30)
+    q1 = str(paper.questions[0].id)
+    started_at = datetime.utcnow() - timedelta(minutes=30, seconds=2)
+    sub = assign(paid, paper, started_at=started_at, answers={q1: "A"})
+    r = _submit(sign_in(paid), paper.id)
+    assert r.status_code == 200 and "score" not in json.dumps(r.json)
+    sub = _reload(sub)
+    assert sub.score == 1 and sub.submitted_at == started_at + timedelta(minutes=30)
+
+
+def test_submit_before_starting_is_refused(paid, sign_in, make_paper, assign):
+    paper = make_paper()
+    sub = assign(paid, paper)
+    assert _submit(sign_in(paid), paper.id).status_code == 409
+    sub = _reload(sub)
+    assert sub.submitted_at is None and sub.score is None
+
+
+def test_list_shows_a_submitted_test_without_its_score(paid, sign_in, started):
+    paper, *_ = started
+    client = sign_in(paid)
+    _submit(client, paper.id)
+    [test] = client.get("/api/student/tests").json["data"]["tests"]
+    assert test["status"] == "SUBMITTED" and "score" not in test
+
+
+def test_submit_to_an_unassigned_test_is_404(paid, make_student, sign_in, make_paper, assign):
+    paper = make_paper()
+    assign(make_student(status="PAID"), paper, started_at=datetime.utcnow())
+    assert _submit(sign_in(paid), paper.id).status_code == 404
+
+
+def test_submit_with_a_malformed_id_is_404(paid, sign_in):
+    assert _submit(sign_in(paid), "not-a-uuid").status_code == 404
+
+
+def test_submit_to_an_unpublished_paper_is_404(paid, sign_in, make_paper, assign):
+    paper = make_paper(published=False)
+    assign(paid, paper, started_at=datetime.utcnow())
+    assert _submit(sign_in(paid), paper.id).status_code == 404
+
+
+def test_submit_is_only_for_paid_applicants(make_student, sign_in, make_paper, assign):
+    student = make_student(status="PAYMENT_PENDING")
+    paper = make_paper()
+    assign(student, paper, started_at=datetime.utcnow())
+    assert _submit(sign_in(student), paper.id).status_code == 403
