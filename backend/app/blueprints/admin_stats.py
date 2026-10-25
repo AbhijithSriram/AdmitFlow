@@ -31,7 +31,7 @@ def _not_implemented():
 @admin_required
 def stats_summary():
     """Registrations, applications started, paid, pending."""
-    return _not_implemented()
+    return _ok(stats_service.get_summary())
 
 
 @admin_stats_bp.route("/stats/programmes", methods=["GET"])

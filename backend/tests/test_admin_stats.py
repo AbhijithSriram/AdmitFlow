@@ -141,3 +141,31 @@ def test_migration_is_safe_to_run_twice_and_keeps_admin_changes(seat_table):
     db.session.commit()
     _run_migration()  # second run: no duplicates, and the admin's change is not overwritten
     assert totals() == (15, 672 - 60 + 999)
+
+
+# ----------------------------------------------------------------------- summary
+SUMMARY_URL = "/api/admin/stats/summary"
+
+
+def test_summary_is_all_zeros_with_no_data(logged_in):
+    r = logged_in.get(SUMMARY_URL)
+    assert r.status_code == 200
+    assert r.json["data"] == {"registrations": 0, "applications_started": 0, "paid": 0, "payment_pending": 0}
+
+
+def test_summary_counts_each_stage(logged_in, make_student):
+    make_student()                                         # registered, never opened the form
+    make_student(status="NOT_STARTED")                     # has an application row, not started
+    make_student(status="IN_PROGRESS")
+    make_student(status="PAYMENT_PENDING", payment="FAILED")
+    make_student(status="PAID", payment="SUCCESS")
+    make_student(status="PAID", payment="SUCCESS")
+
+    r = logged_in.get(SUMMARY_URL)
+    assert r.status_code == 200
+    assert r.json["data"] == {
+        "registrations": 6,
+        "applications_started": 4,   # IN_PROGRESS + PAYMENT_PENDING + 2 x PAID
+        "paid": 2,
+        "payment_pending": 1,
+    }

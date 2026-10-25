@@ -78,3 +78,26 @@ def set_seats(rows: list[dict]) -> list[dict]:
     ), rows)
     db.session.commit()
     return changes
+
+
+# ----------------------------------------------------------------------- summary
+def get_summary() -> dict:
+    """The four numbers on the statistics cards, from one query.
+
+    registrations counts every student row. The other three count applications by status
+    (each student has at most one application).
+    """
+    row = db.session.execute(text(
+        "SELECT "
+        "(SELECT count(*) FROM students) AS registrations, "
+        "count(*) FILTER (WHERE status <> 'NOT_STARTED') AS applications_started, "
+        "count(*) FILTER (WHERE status = 'PAID') AS paid, "
+        "count(*) FILTER (WHERE status = 'PAYMENT_PENDING') AS payment_pending "
+        "FROM applications"
+    )).one()
+    return {
+        "registrations": int(row.registrations),
+        "applications_started": int(row.applications_started),
+        "paid": int(row.paid),
+        "payment_pending": int(row.payment_pending),
+    }
