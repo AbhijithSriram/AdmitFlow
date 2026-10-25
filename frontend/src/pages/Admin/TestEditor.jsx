@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { adminTestsApi } from '../../api/client'
 import { errorMessage } from './adminUtils'
+import ReauthDialog from './ReauthDialog'
 import { useAdminSession } from './useAdminSession'
+import { useKeepAlive } from './useKeepAlive'
 
 // SRD FR-10: create or edit an aptitude test and its questions.
 // Serves two routes: /admin/tests/new (no paperId) and /admin/tests/:paperId (edit).
@@ -32,12 +34,76 @@ function Page({ title, children }) {
   )
 }
 
-function EditorForm({ initial, paperId, onExpired }) {
+// A copy of the editor's state in this browser, so a closed tab, a crash or a failed save never loses
+// the questions typed so far. Cleared once the test is saved on the server.
+const draftKey = (paperId) => `admitflow:test-draft:${paperId || 'new'}`
+function readDraft(paperId) {
+  try {
+    const raw = window.localStorage.getItem(draftKey(paperId))
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+function writeDraft(paperId, form) {
+  try {
+    window.localStorage.setItem(draftKey(paperId), JSON.stringify({ savedAt: Date.now(), form }))
+  } catch {
+    // storage full or blocked: the in-page state and the save itself still work
+  }
+}
+function clearDraft(paperId) {
+  try {
+    window.localStorage.removeItem(draftKey(paperId))
+  } catch {
+    // nothing to do
+  }
+}
+
+function EditorForm({ initial, paperId, adminEmail }) {
   const navigate = useNavigate()
   const nextKey = useRef(initial.questions.length + 1)
   const [form, setForm] = useState(initial)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [reauth, setReauth] = useState(false) // the session expired: sign in over the page, keep the work
+  const retryAfterSignIn = useRef(false)
+  const initialJson = useRef(JSON.stringify(initial))
+  const dirty = JSON.stringify(form) !== initialJson.current
+
+  // Offer the copy kept in this browser if it differs from what the page started with.
+  const [restore, setRestore] = useState(() => {
+    const saved = readDraft(paperId)
+    return saved && JSON.stringify(saved.form) !== initialJson.current ? saved : null
+  })
+  const restoreDraft = () => {
+    const keys = restore.form.questions.map((q) => Number(q.key) || 0)
+    nextKey.current = Math.max(nextKey.current, ...keys) + 1
+    setForm(restore.form)
+    setRestore(null)
+  }
+  const discardDraft = () => {
+    clearDraft(paperId)
+    setRestore(null)
+  }
+
+  // Keep the browser copy current (debounced). While a restore offer is open, leave the old copy alone.
+  useEffect(() => {
+    if (restore) return undefined
+    const t = setTimeout(() => (dirty ? writeDraft(paperId, form) : clearDraft(paperId)), 800)
+    return () => clearTimeout(t)
+  }, [form, dirty, paperId, restore])
+
+  // Warn before leaving the page with changes that are not saved on the server yet.
+  useEffect(() => {
+    if (!dirty) return undefined
+    const warn = (e) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  // Typing makes no requests, so keep the session alive while someone is actively editing.
+  useKeepAlive({ onExpired: () => setReauth(true) })
 
   const total = form.questions.reduce((sum, q) => sum + (Number.parseInt(q.marks, 10) || 0), 0)
   const setQuestion = (i, patch) =>
@@ -51,8 +117,12 @@ function EditorForm({ initial, paperId, onExpired }) {
       return { ...f, questions: qs }
     })
 
-  async function save(e) {
+  function submit(e) {
     e.preventDefault()
+    save()
+  }
+
+  async function save() {
     setError('')
     const duration = Number(form.duration_minutes)
     const pass = Number(form.pass_marks)
@@ -77,17 +147,57 @@ function EditorForm({ initial, paperId, onExpired }) {
     setBusy(true)
     try {
       await (paperId ? adminTestsApi.update(paperId, payload) : adminTestsApi.create(payload))
+      clearDraft(paperId)
+      initialJson.current = JSON.stringify(form) // saved: nothing left to warn about on the way out
       navigate('/admin/tests')
     } catch (err) {
-      if (err?.response?.status === 401) onExpired()
-      else setError(errorMessage(err))
+      if (err?.response?.status === 401) {
+        // Never navigate away here: that would throw away everything typed. Sign in over the page,
+        // then save again.
+        retryAfterSignIn.current = true
+        setReauth(true)
+      } else {
+        setError(errorMessage(err))
+      }
     } finally {
       setBusy(false)
     }
   }
 
+  const signedInAgain = () => {
+    setReauth(false)
+    if (retryAfterSignIn.current) {
+      retryAfterSignIn.current = false
+      save()
+    }
+  }
+
   return (
-    <form onSubmit={save} className="flex flex-col gap-5">
+    <>
+    {/* Outside the editor's <form>: a form inside a form is invalid HTML, and the browser would submit
+        the outer one natively (a full page load that throws the work away) instead of signing in. */}
+    {reauth && (
+      <ReauthDialog
+        email={adminEmail}
+        onSignedIn={signedInAgain}
+        onCancel={() => {
+          retryAfterSignIn.current = false
+          setReauth(false)
+          setError('Not saved: your session has timed out. Your work is still here and kept in this browser; press Save to sign in again.')
+        }}
+      />
+    )}
+    <form onSubmit={submit} className="flex flex-col gap-5">
+      {restore && (
+        <div role="status" className="bg-amber-50 border border-amber-300 rounded-lg p-4 text-sm text-amber-950 flex flex-wrap items-center gap-3">
+          <span className="flex-1 min-w-60">
+            Unsaved work from {new Date(restore.savedAt).toLocaleString('en-IN')} was found in this browser
+            ({restore.form.questions.length} question{restore.form.questions.length === 1 ? '' : 's'}).
+          </span>
+          <button type="button" onClick={restoreDraft} className="px-3 py-1.5 rounded-md bg-slate-900 text-white font-medium">Restore it</button>
+          <button type="button" onClick={discardDraft} className="px-3 py-1.5 rounded-md border border-slate-400 bg-white">Discard</button>
+        </div>
+      )}
       <section className="bg-white border border-slate-200 rounded-lg p-5 grid gap-4 md:grid-cols-[2fr_1fr_1fr]">
         <label className="flex flex-col gap-1 text-sm font-medium text-slate-800">
           Title
@@ -157,12 +267,13 @@ function EditorForm({ initial, paperId, onExpired }) {
         <span className="text-sm text-slate-600">You publish it from the tests list once it is ready.</span>
       </div>
     </form>
+    </>
   )
 }
 
 export default function TestEditor() {
   const { paperId } = useParams()
-  const { status, expire } = useAdminSession()
+  const { status, admin, expire } = useAdminSession()
   const [loaded, setLoaded] = useState({ id: null, paper: null, error: '' })
 
   useEffect(() => {
@@ -186,7 +297,7 @@ export default function TestEditor() {
 
   if (!paperId) {
     const initial = { title: '', duration_minutes: '30', pass_marks: '', questions: [blankQuestion(1)] }
-    return <Page title="New test"><EditorForm initial={initial} onExpired={expire} /></Page>
+    return <Page title="New test"><EditorForm initial={initial} adminEmail={admin?.email} /></Page>
   }
 
   if (loaded.id !== paperId) return <Page title="Edit test"><p className="text-slate-600">Loading test…</p></Page>
@@ -203,5 +314,5 @@ export default function TestEditor() {
     title: p.title, duration_minutes: String(p.duration_minutes), pass_marks: String(p.pass_marks),
     questions: p.questions.map((q, n) => ({ ...blankQuestion(n + 1), ...q, marks: String(q.marks) })),
   }
-  return <Page title="Edit test"><EditorForm key={paperId} initial={initial} paperId={paperId} onExpired={expire} /></Page>
+  return <Page title="Edit test"><EditorForm key={paperId} initial={initial} paperId={paperId} adminEmail={admin?.email} /></Page>
 }
