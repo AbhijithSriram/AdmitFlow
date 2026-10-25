@@ -75,6 +75,10 @@ function ApplicationFormBody() {
   const [agreeError, setAgreeError] = useState('');
   const busyRef = useRef(false);
   const resumedRef = useRef(false);
+  const draftRef = useRef({}); // always the latest draft, for callbacks that may hold an older closure
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   const { status, triggerSave, saveNow } = useAutoSave({
     appId: applicationId,
@@ -163,16 +167,30 @@ function ApplicationFormBody() {
   // switches between the two, the answers saved for the other kind are cleared (and the step starts
   // blank) instead of lingering in the draft, the PDF and the admin's view.
   const resetAcademicIfLevelChanged = async (newProgramme) => {
-    const academic = draft['4'];
-    const previous = draft['3']?.programme;
+    const current = draftRef.current;
+    const academic = current['4'];
+    const previous = current['3']?.programme;
     if (!academic || Object.keys(academic).length === 0 || !previous) return;
     if (isUgProgramme(previous) === isUgProgramme(newProgramme)) return;
     try {
       await applicationApi.saveDraftStep(applicationId, 4, {});
+      draftRef.current = { ...draftRef.current, 4: {} };
       setDraft((prev) => ({ ...prev, 4: {} }));
     } catch {
       // Not fatal: Step 4 rebuilds its payload from the fields that apply when it is next saved.
     }
+  };
+
+  // Every auto-save also updates the local draft, so the browser Back/Forward buttons (which skip
+  // Save & Next) never leave a step showing older answers. On Step 3 the undergraduate/postgraduate
+  // check runs here too, so it applies however the student got to the step.
+  const handleAutoSave = (data) => {
+    triggerSave(data);
+    if (!isPlainObject(data)) return;
+    const step = currentStep;
+    if (step === 3 && data.programme) resetAcademicIfLevelChanged(data.programme);
+    draftRef.current = { ...draftRef.current, [String(step)]: data };
+    setDraft((prev) => ({ ...prev, [String(step)]: data }));
   };
 
   // Next: save the full step, advance ONLY if the save is confirmed (FR-6.2).
@@ -252,7 +270,7 @@ function ApplicationFormBody() {
   }
 
   const stepData = draft[String(currentStep)] || {};
-  const common = { applicationId, onAutoSave: triggerSave, profile };
+  const common = { applicationId, onAutoSave: handleAutoSave, profile };
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md my-8">
