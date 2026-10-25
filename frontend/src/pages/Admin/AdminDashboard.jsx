@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { adminApi } from '../../api/client'
 import StatusBadge from '../../components/StatusBadge'
 import DeleteStudentModal from './DeleteStudentModal'
+import ExportButtons from './ExportButtons'
 import StudentDetailPanel from './StudentDetailPanel'
 import { PAYMENT_LABELS, STAGE_OPTIONS, errorMessage, formatDate } from './adminUtils'
 import { useAdminSession } from './useAdminSession'
@@ -117,6 +118,9 @@ export default function AdminDashboard() {
             </select>
           </label>
         </div>
+
+        {/* FR-11 export (Person 3's component): exports what the filters above currently select. */}
+        <ExportButtons filters={query} onExpired={expire} />
 
         {error && (
           <p role="alert" className="text-sm font-medium text-red-700 mb-3">

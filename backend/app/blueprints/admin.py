@@ -68,21 +68,15 @@ def list_students():
     Query params: page, sort (name|email|registered_at|stage), order (asc|desc),
     q (search name/email/phone), stage, payment_status.
     """
-    a = request.args
-    sort, order = a.get("sort", "registered_at"), a.get("order", "desc")
-    stage, pay = a.get("stage", ""), a.get("payment_status", "")
-    if sort not in ("name", "email", "registered_at", "stage") or order not in ("asc", "desc"):
-        return _fail("Invalid sort option.", 400)
-    if stage and stage not in admin_service.STAGES:
-        return _fail("Invalid stage filter.", 400)
-    if pay and pay not in admin_service.PAYMENT_STATUSES:
-        return _fail("Invalid payment status filter.", 400)
+    filters, problem = admin_service.parse_applicant_filters(request.args)
+    if problem:
+        return _fail(problem, 400)
     try:
-        page = int(a.get("page", 1))
+        page = int(request.args.get("page", 1))
     except ValueError:
         return _fail("Invalid page number.", 400)
 
-    return _ok(admin_service.list_students(page, sort, order, a.get("q", "").strip()[:100], stage, pay))
+    return _ok(admin_service.list_students(page, **filters))
 
 
 @admin_bp.route("/students/<student_id>", methods=["GET"])
