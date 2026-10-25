@@ -274,7 +274,7 @@ def _registrations(client, **params):
 def test_default_range_is_the_last_30_days_ending_today(logged_in):
     rows = _registrations(logged_in)
     assert len(rows) == 30
-    assert rows[-1]["date"] == datetime.now(timezone.utc).date().isoformat()
+    assert rows[-1]["date"] == datetime.now(stats_service.IST).date().isoformat()
     assert all(row["count"] == 0 for row in rows)
 
 
@@ -292,10 +292,11 @@ def test_days_without_registrations_are_filled_with_zero(logged_in, make_student
 
 
 def test_both_ends_are_included_and_nothing_outside_is_counted(logged_in, make_student):
-    make_student(created=datetime(2026, 9, 30, 23, 59, 59))   # just before the range
-    make_student(created=datetime(2026, 10, 1, 0, 0, 0))      # first second of the range
-    make_student(created=datetime(2026, 10, 2, 23, 59, 59))   # last second of the range
-    make_student(created=datetime(2026, 10, 3, 0, 0, 0))      # just after the range
+    # Days are India-time days: 1 Oct runs from 30 Sep 18:30 UTC to 1 Oct 18:30 UTC.
+    make_student(created=datetime(2026, 9, 30, 18, 29, 59))   # 23:59:59 IST on 30 Sep: before the range
+    make_student(created=datetime(2026, 9, 30, 18, 30, 0))    # 00:00:00 IST on 1 Oct: first second
+    make_student(created=datetime(2026, 10, 2, 18, 29, 59))   # 23:59:59 IST on 2 Oct: last second
+    make_student(created=datetime(2026, 10, 2, 18, 30, 0))    # 00:00:00 IST on 3 Oct: after the range
     rows = _registrations(logged_in, **{"from": "2026-10-01", "to": "2026-10-02"})
     assert [row["count"] for row in rows] == [1, 1]
 
@@ -323,3 +324,21 @@ def test_bad_ranges_are_rejected(logged_in, params):
     r = logged_in.get(REG_URL, query_string=params)
     assert r.status_code == 400
     assert r.json["success"] is False and isinstance(r.json["error"], str)
+
+
+def test_days_are_india_time_days(logged_in, make_student):
+    make_student(created=datetime(2026, 10, 1, 20, 0))   # 01:30 on 2 Oct in India, still 1 Oct in UTC
+    rows = _registrations(logged_in, **{"from": "2026-10-01", "to": "2026-10-02"})
+    assert [row["count"] for row in rows] == [0, 1]
+
+
+def test_audit_failure_does_not_turn_a_saved_change_into_an_error(logged_in, seats, monkeypatch):
+    from app.services import admin_service
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("audit down")
+
+    monkeypatch.setattr(admin_service, "write_audit", boom)
+    r = logged_in.put(URL, json={"seats": [_row(seats=111)]})
+    assert r.status_code == 200 and r.json["data"]["changed"] == 1
+    assert ("B.Tech", "CSE", 111) in _as_set(_rows(logged_in))
