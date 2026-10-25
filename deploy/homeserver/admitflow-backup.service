@@ -1,0 +1,12 @@
+[Unit]
+Description=AdmitFlow nightly backup (database dump + uploaded files)
+Documentation=file:///home/abhijith/admitflow/README.md
+After=postgresql.service admitflow-minio.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+# Installed by install.sh from deploy/homeserver/backup.sh; root-owned, so the app user cannot change it.
+ExecStart=/usr/local/sbin/admitflow-backup
+Nice=10
+IOSchedulingClass=idle

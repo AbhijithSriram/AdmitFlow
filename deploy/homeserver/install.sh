@@ -47,6 +47,7 @@ DB_NAME=admitflow
 DB_USER=admitflow
 BUCKET=admitflow
 CF_CONFIG=/etc/cloudflared/config.yml
+BACKUP_DIR=/srv/nas/admitflow-backups   # root-only (0700); nightly dumps, file snapshots, pre-install dumps
 HERE="$APP_DIR/deploy/homeserver"
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -182,6 +183,23 @@ app_psql() { PGPASSWORD="$DB_PASSWORD" psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_N
 if [ -z "$(app_psql -c "SELECT to_regclass('public.students')")" ]; then
     say "Creating the tables (schema.sql)"
     app_psql -f "$APP_DIR/backend/migrations/schema.sql"
+else
+    # An existing database: take a dump BEFORE the migrations touch it, so an update can always be
+    # undone (pg_restore, see README). Kept next to the nightly backups, root-only.
+    install -d -m 0700 "$BACKUP_DIR" "$BACKUP_DIR/db"
+    snapshot="$BACKUP_DIR/db/pre-install-$(date -u +%Y%m%d-%H%M%S).dump"
+    (umask 077; runuser -u postgres -- pg_dump --format=custom --dbname="$DB_NAME" > "$snapshot")
+    pg_restore --list "$snapshot" >/dev/null || die "the pre-install database dump is unreadable: $snapshot"
+    echo "database snapshot before migrating: $snapshot"
+fi
+# Migration 005 adds a unique index on test_submissions (application_id, test_paper_id). Where that
+# index does not exist yet, duplicated pairs would make it fail half way, so check first and stop
+# with a clear message instead.
+if [ -n "$(app_psql -c "SELECT to_regclass('public.test_submissions')")" ] &&
+   [ -z "$(app_psql -c "SELECT to_regclass('public.uq_test_submissions_app_paper')")" ]; then
+    dups=$(app_psql -c "SELECT count(*) FROM (SELECT 1 FROM test_submissions GROUP BY application_id, test_paper_id HAVING count(*) > 1) d")
+    [ "$dups" = "0" ] || die "test_submissions has $dups duplicated (application, test) pair(s), so migration 005's unique index cannot be created. Remove the duplicates, then run this again."
+    echo "pre-check for migration 005: no duplicated test assignments"
 fi
 # Numbered migrations (002_*.sql, 003_*.sql, ...), applied in order on every run. Each one must be
 # idempotent (IF NOT EXISTS, ON CONFLICT DO NOTHING, ...): a no-op on a fresh install, the upgrade
@@ -337,16 +355,32 @@ else
     }
 fi
 
+# ------------------------------------------------------------ 11. nightly backups
+say "Nightly backups"
+# The script is copied out of the repo into a root-owned path: the timer runs it as root, and the
+# repo lives in the app user's home, where that user could otherwise change what root runs.
+install -m 0700 -o root -g root "$HERE/backup.sh" /usr/local/sbin/admitflow-backup
+install -m 0644 "$HERE/admitflow-backup.service" /etc/systemd/system/admitflow-backup.service
+install -m 0644 "$HERE/admitflow-backup.timer" /etc/systemd/system/admitflow-backup.timer
+systemctl daemon-reload
+systemctl enable --now admitflow-backup.timer >/dev/null
+# One run now: proves the backup works on this machine, and gives a first restore point.
+BACKUP_DIR="$BACKUP_DIR" DB_NAME="$DB_NAME" MINIO_DATA="$DATA_DIR/minio" /usr/local/sbin/admitflow-backup ||
+    warn "the first backup run failed (see above); the nightly timer is installed anyway"
+echo "next run: $(systemctl list-timers admitflow-backup.timer --no-legend | awk '{print $1, $2, $3}')"
+
 say "Done"
 echo
 echo "  https://$HOSTNAME_FQDN"
 echo
-echo "  The hostname needs ONE DNS record, once (this script cannot create it):"
-echo "      Cloudflare dashboard -> DNS -> add a CNAME"
-echo "          name    admitflow"
-echo "          target  6d4003bd-0238-4a7b-bce4-96b9e51174a0.cfargotunnel.com"
-echo "          proxy   on (orange cloud)"
-echo
+if ! getent hosts "$HOSTNAME_FQDN" >/dev/null 2>&1; then
+    echo "  $HOSTNAME_FQDN does not resolve yet. It needs ONE DNS record, once:"
+    echo "      Cloudflare dashboard -> DNS -> add a CNAME"
+    echo "          name    admitflow"
+    echo "          target  6d4003bd-0238-4a7b-bce4-96b9e51174a0.cfargotunnel.com"
+    echo "          proxy   on (orange cloud)"
+    echo
+fi
 if [ -n "$ADMIN_REPORT" ]; then
     echo "  Admin accounts (sign in at https://$HOSTNAME_FQDN/admin/auth). Shown ONCE: only"
     echo "  bcrypt hashes are stored. Copy them now."
@@ -357,4 +391,5 @@ fi
 echo "  Logs:     journalctl -u admitflow -f        journalctl -u admitflow-minio -f"
 echo "  Restart:  sudo systemctl restart admitflow"
 echo "  Update:   cd $APP_DIR && git pull && sudo bash deploy/homeserver/install.sh"
+echo "  Backups:  nightly at 02:30 India time into $BACKUP_DIR (sudo admitflow-backup runs one now; restore: README)"
 echo

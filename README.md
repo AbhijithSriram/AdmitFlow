@@ -143,7 +143,7 @@ The script is idempotent, so re-running it is also the update path. Before the f
 
 1. Put the third-party keys in `/home/abhijith/.admitflow-secrets.env` (template: `deploy/homeserver/secrets.env.example`).
 2. Stage the MinIO binary at `/home/abhijith/.admitflow-stage/minio`.
-3. After it finishes, add the one DNS record it prints (the tunnel has no wildcard record).
+3. If it says the hostname does not resolve, add the one DNS record it prints (the tunnel has no wildcard record).
 
 It uses ports 5001 (API), 8088 (nginx), 9000 and 9001 (file storage) and 5432 (database), all loopback-only, and
 refuses to start if a neighbour already holds one. Logs: `journalctl -u admitflow -f` and `journalctl -u admitflow-minio -f`.
@@ -151,3 +151,30 @@ refuses to start if a neighbour already holds one. Logs: `journalctl -u admitflo
 Two server-specific settings worth knowing about: `MINIO_PUBLIC_ENDPOINT` makes signed file links name the public
 host (a browser cannot open `127.0.0.1:9000`), and nginx reads the visitor's real address from Cloudflare's
 `CF-Connecting-IP` header, without which every visitor would share one login rate-limit bucket.
+
+#### Backups and restore
+
+`install.sh` sets up a nightly backup (02:30 India time, `admitflow-backup.timer`) into `/srv/nas/admitflow-backups`,
+which only root can read because the dumps contain applicants' personal data:
+
+- `db/admitflow-<date>.dump`: the whole database (`pg_dump` custom format), kept for 14 days.
+- `files/<date>/`: the uploaded documents (the MinIO data directory). Unchanged files are hard links to the previous
+  night, so each night only costs what changed.
+- `db/pre-install-<date>.dump`: taken by every `install.sh` run on an existing database, before any migration.
+
+Run one now with `sudo admitflow-backup`; see the schedule with `systemctl list-timers admitflow-backup.timer`.
+The backups are on `/srv`, a different partition from the database but the same disk: copy the newest dump off the
+machine now and then.
+
+To restore the database from a dump (this replaces the current data):
+
+```bash
+sudo systemctl stop admitflow
+sudo -u postgres dropdb admitflow && sudo -u postgres createdb -O admitflow admitflow
+sudo -u postgres pg_restore --exit-on-error -d admitflow < /srv/nas/admitflow-backups/db/admitflow-<date>.dump
+sudo systemctl start admitflow
+```
+
+To restore the uploaded files: `sudo systemctl stop admitflow-minio`, then
+`sudo rsync -a --delete /srv/nas/admitflow-backups/files/<date>/ /srv/nas/admitflow/minio/`, then start it again.
+Restore the files from the same night as the database dump, so the documents match the records.
