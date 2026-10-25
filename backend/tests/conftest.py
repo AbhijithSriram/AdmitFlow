@@ -3,6 +3,8 @@ ON DELETE CASCADE chain and the audit_log trigger exactly as production will.
 
 Setup:  createdb admitflow_test   then   TEST_DATABASE_URL=postgresql://user:pw@host:port/admitflow_test pytest
 (The test database is wiped and rebuilt from migrations/ on every run - never point it at real data.)
+Before wiping anything the setup refuses a database that is the same as DATABASE_URL, a non-local host
+(unless ALLOW_REMOTE_TEST_DB=1) or one whose name does not contain "test" - see tests/db_safety.py.
 """
 import os
 import pathlib
@@ -10,6 +12,8 @@ from datetime import date
 
 import psycopg2
 import pytest
+
+from tests import db_safety
 
 MIGRATIONS = pathlib.Path(__file__).resolve().parents[1] / "migrations"
 TEST_URL = os.environ.get("TEST_DATABASE_URL")
@@ -21,9 +25,22 @@ pytestmark = pytest.mark.skipif(not TEST_URL, reason="TEST_DATABASE_URL not set"
 def _schema():
     if not TEST_URL:
         pytest.skip("TEST_DATABASE_URL not set")
+    # Safety first: DROP SCHEMA below wipes the database, so refuse anything that is not a dedicated,
+    # local test database BEFORE any destructive SQL (rules and reasons in tests/db_safety.py).
+    try:
+        db_safety.check_test_url(TEST_URL, db_safety.configured_database_urls(),
+                                 allow_remote=os.environ.get("ALLOW_REMOTE_TEST_DB") == "1")
+    except db_safety.UnsafeTestDatabase as e:
+        pytest.exit(f"Refusing to run the tests: {e}", returncode=2)
     conn = psycopg2.connect(TEST_URL.replace("postgresql+psycopg2://", "postgresql://"))
     conn.autocommit = True
     cur = conn.cursor()
+    cur.execute("SELECT current_database()")
+    try:
+        db_safety.check_database_name(cur.fetchone()[0])
+    except db_safety.UnsafeTestDatabase as e:
+        conn.close()
+        pytest.exit(f"Refusing to run the tests: {e}", returncode=2)
     cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
     cur.execute((MIGRATIONS / "schema.sql").read_text())
     # every numbered migration, in order (the same rule as deploy/homeserver/install.sh),

@@ -22,6 +22,9 @@ log = logging.getLogger(__name__)
 
 PER_PAGE = admin_service.PER_PAGE  # 20, same as the applicant list
 MAX_QUESTIONS = 200
+# test_submissions.score is NUMERIC(6,2): it cannot hold 10000 or more. A published paper's questions
+# add up to exactly total_marks, so capping total_marks keeps every possible score storable.
+MAX_TOTAL_MARKS = 9999
 _INSERT_CHUNK = 1000  # rows per INSERT when assigning to many applicants
 
 
@@ -51,7 +54,7 @@ def parse_paper(body) -> dict:
     """Validate a paper + its questions. Raises ServiceError(400, ...) with a message saying what to fix.
 
     Rules: 4 options (A-D) per question, exactly one correct option, marks per question,
-    1 to MAX_QUESTIONS questions, and 0 <= pass_marks <= total_marks.
+    1 to MAX_QUESTIONS questions, 1 <= total_marks <= MAX_TOTAL_MARKS, and 0 <= pass_marks <= total_marks.
     Whether the question marks add up to total_marks is checked when the paper is PUBLISHED.
     """
     if not isinstance(body, dict):
@@ -62,8 +65,8 @@ def parse_paper(body) -> dict:
     duration, total, pass_marks = body.get("duration_minutes"), body.get("total_marks"), body.get("pass_marks")
     if not _is_int(duration) or not 1 <= duration <= 600:
         raise ServiceError(400, "Duration must be a whole number of minutes between 1 and 600.")
-    if not _is_int(total) or total < 1:
-        raise ServiceError(400, "Total marks must be a whole number of at least 1.")
+    if not _is_int(total) or not 1 <= total <= MAX_TOTAL_MARKS:
+        raise ServiceError(400, f"Total marks must be a whole number from 1 to {MAX_TOTAL_MARKS}.")
     if not _is_int(pass_marks) or not 0 <= pass_marks <= total:
         raise ServiceError(400, "Pass marks must be between 0 and the total marks.")
 
@@ -167,6 +170,35 @@ def get_paper(paper_id: str) -> dict:
 
 
 # ----------------------------------------------------------------- write side
+def _commit_with_audit(admin_id: str, action: str, details: dict,
+                       student_id: str | None = None, student_email: str | None = None) -> None:
+    """Record the audit entry FIRST, then commit the pending change (the audit-first rule of the export).
+
+    The caller has already validated and staged its change in db.session but not committed it, so:
+      - if the audit entry cannot be written, the staged change is rolled back and nothing happened;
+      - if the commit then fails, the change is rolled back and a <action>_FAILED entry is recorded
+        (as the hard delete does), so the log never claims something that did not happen.
+    write_audit uses its own session, so the pending change does not interfere with it.
+    """
+    try:
+        admin_service.write_audit(admin_id, action, student_id, student_email, details)
+    except Exception:
+        db.session.rollback()
+        log.exception("audit entry %s could not be written; change rolled back admin=%s", action, admin_id)
+        raise ServiceError(500, "This action could not be recorded in the audit log, so nothing was changed. "
+                                "Please try again.")
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        log.exception("commit failed after audit entry %s admin=%s", action, admin_id)
+        try:
+            admin_service.write_audit(admin_id, f"{action}_FAILED", student_id, student_email, details)
+        except Exception:
+            log.exception("could not record %s_FAILED admin=%s", action, admin_id)
+        raise
+
+
 def create_paper(body, admin) -> dict:
     """Create a paper and its questions in ONE transaction: a bad question leaves nothing behind."""
     parsed = parse_paper(body)
@@ -223,8 +255,7 @@ def publish_paper(paper_id: str, admin) -> dict:
             raise ServiceError(400, f"The questions add up to {marks} marks but the total is {paper.total_marks}. "
                                     "Make them equal, then publish.")
         paper.is_published = True
-        db.session.commit()
-        admin_service.write_audit(admin.id, "TEST_PUBLISHED", details={"paper_id": str(paper.id), "title": paper.title})
+        _commit_with_audit(admin.id, "TEST_PUBLISHED", {"paper_id": str(paper.id), "title": paper.title})
     return get_paper(str(paper.id))
 
 
@@ -250,17 +281,21 @@ def assign_paper(paper_id: str, body, admin) -> dict:
         query = query.where(Application.specialisation == specialisation.strip())
     eligible = db.session.execute(query).scalars().all()
 
+    admin_id, paper_id, title = admin.id, str(paper.id), paper.title  # plain values: safe across a rollback
     now, inserted = datetime.utcnow(), 0
-    for i in range(0, len(eligible), _INSERT_CHUNK):
-        rows = [{"id": str(uuid.uuid4()), "application_id": app_id, "test_paper_id": str(paper.id),
-                 "answers": {}, "assigned_at": now} for app_id in eligible[i:i + _INSERT_CHUNK]]
-        result = db.session.execute(pg_insert(TestSubmission).values(rows).on_conflict_do_nothing(
-            index_elements=["application_id", "test_paper_id"]))
-        inserted += result.rowcount
-    db.session.commit()
-
-    admin_service.write_audit(admin.id, "TEST_ASSIGNED", details={
-        "paper_id": str(paper.id), "title": paper.title, "assigned": inserted, "eligible": len(eligible),
+    try:
+        for i in range(0, len(eligible), _INSERT_CHUNK):
+            rows = [{"id": str(uuid.uuid4()), "application_id": app_id, "test_paper_id": paper_id,
+                     "answers": {}, "assigned_at": now} for app_id in eligible[i:i + _INSERT_CHUNK]]
+            result = db.session.execute(pg_insert(TestSubmission).values(rows).on_conflict_do_nothing(
+                index_elements=["application_id", "test_paper_id"]))
+            inserted += result.rowcount
+    except Exception:
+        db.session.rollback()
+        raise
+    # The rows are inserted but not committed yet; the audit entry (which needs the count) comes first.
+    _commit_with_audit(admin_id, "TEST_ASSIGNED", {
+        "paper_id": paper_id, "title": title, "assigned": inserted, "eligible": len(eligible),
         "programme": programme, "specialisation": specialisation})
     return {"assigned": inserted, "eligible": len(eligible), "already_assigned": len(eligible) - inserted}
 
@@ -277,10 +312,10 @@ def reset_attempt(paper_id: str, application_id: str, admin) -> dict:
         select(Student).join(Application, Application.student_id == Student.id)
         .where(Application.id == application_id)).scalar_one()
     was = _status(sub)
+    admin_id, student_id, student_email = admin.id, student.id, student.email
+    details = {"paper_id": str(paper.id), "title": paper.title, "was": was}
     sub.answers, sub.score, sub.started_at, sub.submitted_at = {}, None, None, None
-    db.session.commit()
-    admin_service.write_audit(admin.id, "TEST_ATTEMPT_RESET", student.id, student.email,
-                              {"paper_id": str(paper.id), "title": paper.title, "was": was})
+    _commit_with_audit(admin_id, "TEST_ATTEMPT_RESET", details, student_id, student_email)
     return {"reset": True, "status": "ASSIGNED"}
 
 

@@ -1,5 +1,6 @@
 """Admin side of the aptitude test (FR-10): /api/admin/tests, scores in the applicant views, hard delete."""
 from datetime import datetime, timedelta
+from unittest import mock
 
 import pytest
 
@@ -8,6 +9,7 @@ from app.models import Application, AuditLog, Student
 from app.models.test_paper import TestPaper
 from app.models.test_question import TestQuestion
 from app.models.test_submission import TestSubmission
+from app.services import test_service
 
 URL = "/api/admin/tests"
 
@@ -357,3 +359,99 @@ def test_every_route_needs_an_admin_session(client):
                          ("post", "/p1/publish"), ("post", "/p1/assign"), ("get", "/p1/results"),
                          ("post", "/p1/reset/a1")):
         assert getattr(client, method)(URL + path).status_code == 401, (method, path)
+
+
+# ------------------------------------------- marks limit (score column is NUMERIC(6,2))
+@pytest.mark.parametrize("total", [10000, 20000, 2**31, 10**12])
+def test_create_rejects_total_marks_above_the_score_limit(logged_in, total):
+    r = logged_in.post(URL, json=paper_body(total_marks=total, pass_marks=1))
+    assert r.status_code == 400 and r.json["success"] is False
+    assert "from 1 to 9999" in r.json["error"], r.json
+    assert TestPaper.query.count() == 0
+
+
+def test_a_valid_paper_can_still_be_created(logged_in):
+    r = logged_in.post(URL, json=paper_body())
+    assert r.status_code == 201 and r.json["data"]["total_marks"] == 3
+
+
+def test_the_largest_allowed_paper_cannot_overflow_the_score_column(logged_in, paid):
+    """99 questions of 100 marks + one of 99 = 9999 = the cap. A perfect score must be storable."""
+    qs = [question(i, correct="A", marks=100) for i in range(1, 100)] + [question(100, correct="A", marks=99)]
+    pid = make_paper(logged_in, publish=True, total_marks=9999, pass_marks=5000, questions=qs)
+    paid()
+    logged_in.post(f"{URL}/{pid}/assign")
+    paper = db.session.get(TestPaper, pid)
+    perfect = test_service.grade(paper, {str(q.id): "A" for q in paper.questions})
+    assert perfect == 9999
+    sub = TestSubmission.query.one()
+    sub.score = perfect                       # what the student side stores on submit
+    db.session.commit()                       # raises if NUMERIC(6,2) cannot hold it
+    db.session.refresh(sub)
+    assert float(sub.score) == 9999.0
+
+
+# ---------------------------------- audit first: a failed audit write changes nothing
+def _audit_down():
+    return mock.patch("app.services.admin_service.write_audit", side_effect=RuntimeError("audit down"))
+
+
+def test_publish_is_not_applied_when_the_audit_entry_cannot_be_written(logged_in):
+    pid = make_paper(logged_in)
+    with _audit_down():
+        r = logged_in.post(f"{URL}/{pid}/publish")
+    assert r.status_code == 500 and r.json["success"] is False and "nothing was changed" in r.json["error"]
+    db.session.expire_all()
+    assert db.session.get(TestPaper, pid).is_published is False
+    assert AuditLog.query.filter_by(action_type="TEST_PUBLISHED").count() == 0
+    # once the audit log works again the same request succeeds, and is audited exactly once
+    assert logged_in.post(f"{URL}/{pid}/publish").status_code == 200
+    assert AuditLog.query.filter_by(action_type="TEST_PUBLISHED").count() == 1
+
+
+def test_assign_is_not_applied_when_the_audit_entry_cannot_be_written(logged_in, paid):
+    paid("A"); paid("B")
+    pid = make_paper(logged_in, publish=True)
+    with _audit_down():
+        r = logged_in.post(f"{URL}/{pid}/assign", json={})
+    assert r.status_code == 500 and r.json["success"] is False and "nothing was changed" in r.json["error"]
+    db.session.expire_all()
+    assert TestSubmission.query.count() == 0
+    assert AuditLog.query.filter_by(action_type="TEST_ASSIGNED").count() == 0
+    r = logged_in.post(f"{URL}/{pid}/assign", json={})
+    assert r.status_code == 200 and r.json["data"]["assigned"] == 2
+    assert AuditLog.query.filter_by(action_type="TEST_ASSIGNED").count() == 1
+
+
+def test_reset_is_not_applied_when_the_audit_entry_cannot_be_written(logged_in, paid):
+    pid = make_paper(logged_in, publish=True)
+    _, a = paid("Retaker")
+    logged_in.post(f"{URL}/{pid}/assign")
+    sub = TestSubmission.query.one()
+    sub.answers = {"x": "A"}
+    _submit(sub, 2)
+    with _audit_down():
+        r = logged_in.post(f"{URL}/{pid}/reset/{a.id}")
+    assert r.status_code == 500 and r.json["success"] is False and "nothing was changed" in r.json["error"]
+    db.session.expire_all()
+    sub = TestSubmission.query.one()
+    assert sub.answers == {"x": "A"} and float(sub.score) == 2.0 and sub.submitted_at is not None
+    assert AuditLog.query.filter_by(action_type="TEST_ATTEMPT_RESET").count() == 0
+
+
+def test_a_failed_commit_is_recorded_as_failed_and_changes_nothing(logged_in):
+    """Audit-first means the entry exists before the commit; if the commit then fails, a *_FAILED
+    entry says so (the same approach as the hard delete), and the paper stays unpublished."""
+    pid = make_paper(logged_in)
+    with mock.patch.object(db.session, "commit", side_effect=RuntimeError("db down")):
+        with pytest.raises(RuntimeError):
+            logged_in.post(f"{URL}/{pid}/publish")
+    db.session.rollback()
+    assert db.session.get(TestPaper, pid).is_published is False
+    assert AuditLog.query.filter_by(action_type="TEST_PUBLISHED_FAILED").count() == 1
+
+
+def test_a_normal_publish_leaves_no_failed_entry(logged_in):
+    make_paper(logged_in, publish=True)
+    assert AuditLog.query.filter_by(action_type="TEST_PUBLISHED").count() == 1
+    assert AuditLog.query.filter(AuditLog.action_type.like("%_FAILED")).count() == 0
