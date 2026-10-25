@@ -63,7 +63,8 @@ here with their reasoning so you can see why.
 ### 3.1 Database changes — two new migration files, one owner each
 
 Nobody edits `schema.sql`. New columns go in numbered migration files (they must be safe to run repeatedly, like
-`003`/`004`) and `deploy/homeserver/install.sh` gets one line per file.
+`003`/`004`). `deploy/homeserver/install.sh` applies every `NNN_*.sql` file in numeric order on each run, so adding
+the file is all it takes: do not edit `install.sh` for a migration.
 
 **`backend/migrations/005_aptitude_tests.sql` — owner Person 4, merged FIRST (day 1)**
 ```sql

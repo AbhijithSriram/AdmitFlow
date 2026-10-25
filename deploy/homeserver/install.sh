@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 #
 # Install (or update) AdmitFlow on homeserver.
 #
@@ -183,11 +183,16 @@ if [ -z "$(app_psql -c "SELECT to_regclass('public.students')")" ]; then
     say "Creating the tables (schema.sql)"
     app_psql -f "$APP_DIR/backend/migrations/schema.sql"
 fi
-# Idempotent migrations: a no-op on a fresh install, the upgrade path on an older database.
-app_psql -f "$APP_DIR/backend/migrations/002_admin_portal.sql" >/dev/null
-app_psql -f "$APP_DIR/backend/migrations/003_otp_attempts.sql" >/dev/null
-app_psql -f "$APP_DIR/backend/migrations/004_swap_programme_and_academic_steps.sql" >/dev/null
-app_psql -f "$APP_DIR/backend/migrations/005_aptitude_tests.sql" >/dev/null
+# Numbered migrations (002_*.sql, 003_*.sql, ...), applied in order on every run. Each one must be
+# idempotent (IF NOT EXISTS, ON CONFLICT DO NOTHING, ...): a no-op on a fresh install, the upgrade
+# path on an older database. A new migration is picked up just by adding the file; nothing here
+# needs editing. The glob sorts, so the three-digit prefix is the order.
+shopt -s nullglob
+for migration in "$APP_DIR"/backend/migrations/[0-9][0-9][0-9]_*.sql; do
+    echo "migration: $(basename "$migration")"
+    app_psql -f "$migration" >/dev/null
+done
+shopt -u nullglob
 echo "database ready"
 
 # ------------------------------------------------------------ 4. file storage
