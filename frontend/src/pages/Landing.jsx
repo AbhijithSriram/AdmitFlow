@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { INSTITUTION_NAME, KEY_DATES, PROGRAMMES as PROGRAMME_SPECIALISATIONS } from '../content/institution'
+import { DATES_NOTE, INSTITUTION_NAME, KEY_DATES, PROGRAMMES as PROGRAMME_SPECIALISATIONS } from '../content/institution'
 
 // Same list the application form offers in Step 4, so the two can never disagree.
 const PROGRAMMES = Object.entries(PROGRAMME_SPECIALISATIONS).map(([name, specialisations]) => ({
@@ -71,11 +71,19 @@ export default function Landing() {
               </div>
             ))}
           </dl>
+          {DATES_NOTE && <p className="text-sm text-gray-500">{DATES_NOTE}</p>}
         </section>
       </main>
 
       <footer className="px-6 py-4 border-t border-gray-200 text-center text-sm text-gray-500">
-        &copy; AdmitFlow. Need help? Contact the admissions office.
+        AdmitFlow is an academic project; {INSTITUTION_NAME} is fictional and no admissions are offered.{' '}
+        <Link to="/info/about" className="underline">
+          About this project
+        </Link>{' '}
+        &middot;{' '}
+        <Link to="/info/contact" className="underline">
+          Contact the project team
+        </Link>
       </footer>
     </div>
   )

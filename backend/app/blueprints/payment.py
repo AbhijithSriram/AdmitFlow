@@ -280,6 +280,8 @@ def _generate_and_deliver_confirmation(student: Student, application: Applicatio
                 "payment_id": payment.razorpay_payment_id,
                 "order_id": payment.razorpay_order_id,
                 "paid_on": datetime.utcnow().strftime("%d %b %Y, %H:%M UTC"),
+                # Razorpay test keys start rzp_test_: the receipt then says no real money was charged.
+                "test_mode": str(current_app.config.get("RAZORPAY_KEY_ID") or "").startswith("rzp_test_"),
             }
         )
 

@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom'
+import DemoNotice from './components/DemoNotice'
 import RequireAuth from './components/RequireAuth'
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminLogin from './pages/Admin/AdminLogin'
@@ -19,6 +20,9 @@ import Tests from './pages/Tests'
 
 export default function App() {
   return (
+    <>
+    {/* Academic-project notice above every page, student and staff alike. */}
+    <DemoNotice />
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/signup" element={<Signup />} />
@@ -67,5 +71,6 @@ export default function App() {
       {/* Anything else: a "Page not found" page instead of a blank screen. Keep this last. */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </>
   )
 }

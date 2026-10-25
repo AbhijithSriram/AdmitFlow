@@ -74,8 +74,14 @@ def _rows_html(data: dict) -> str:
     return "".join(sections) or "<p><em>No form data recorded.</em></p>"
 
 
+# Printed at the foot of every page of every PDF (application, receipt, export). These files are emailed
+# and downloaded, so they travel without the website's own notice and must say what they are.
+DEMO_FOOTER = ("AdmitFlow is an academic project: AdmitFlow Institute is fictional. "
+               "This document is not issued by any real college and is not an offer of admission.")
+
 _BASE_STYLE = """
-@page { size: A4; margin: 2cm; }
+@page { size: A4; margin: 2cm;
+        @bottom-center { content: "%s"; font-size: 8px; color: #777; } }""" % DEMO_FOOTER + """
 body { font-family: sans-serif; color: #111; }
 h1 { margin-bottom: 0; }
 h2 { color: #444; font-weight: normal; margin-top: 0.2cm; }
@@ -179,6 +185,7 @@ def _receipt_template(context: dict) -> str:
           <tr><td class="label">Razorpay Order ID</td><td>{_esc(context.get('order_id'))}</td></tr>
           <tr><td class="label">Paid On</td><td>{_esc(context.get('paid_on'))}</td></tr>
         </table>
+        {"<p><strong>Test mode:</strong> this payment was made in the payment gateway's test mode. No real money was charged, and this receipt is not proof of any real payment.</p>" if context.get("test_mode") else ""}
       </body>
     </html>
     """

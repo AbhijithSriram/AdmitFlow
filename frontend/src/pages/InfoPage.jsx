@@ -1,7 +1,10 @@
 import { Link, useParams } from 'react-router-dom'
 import {
+  ABOUT,
   APPLICATION_FEE_INR,
   CONTACT,
+  DATES_NOTE,
+  DOCUMENTS_AT_ADMISSION,
   ELIGIBILITY,
   GUIDELINES,
   KEY_DATES,
@@ -30,6 +33,12 @@ const PAGES = {
             </li>
           ))}
         </ul>
+        <h2 className="text-lg font-semibold mb-2">Original documents checked at admission</h2>
+        <ul className="list-disc pl-5 flex flex-col gap-1 mb-6">
+          {DOCUMENTS_AT_ADMISSION.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
         <h2 className="text-lg font-semibold mb-2">Fee</h2>
         <table className="w-full max-w-sm text-sm border border-gray-200">
           <tbody>
@@ -49,14 +58,17 @@ const PAGES = {
   dates: {
     title: 'Important Dates',
     render: () => (
-      <dl className="grid gap-2 max-w-md">
-        {KEY_DATES.map((item) => (
-          <div key={item.label} className="flex justify-between border-b border-gray-200 py-2">
-            <dt className="text-gray-600">{item.label}</dt>
-            <dd className="font-medium">{item.value}</dd>
-          </div>
-        ))}
-      </dl>
+      <>
+        <dl className="grid gap-2 max-w-lg">
+          {KEY_DATES.map((item) => (
+            <div key={item.label} className="flex justify-between gap-4 border-b border-gray-200 py-2">
+              <dt className="text-gray-600">{item.label}</dt>
+              <dd className="font-medium text-right">{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+        {DATES_NOTE && <p className="text-sm text-gray-500 mt-3">{DATES_NOTE}</p>}
+      </>
     ),
   },
   guidelines: {
@@ -72,20 +84,49 @@ const PAGES = {
   contact: {
     title: 'Contact',
     render: () => (
-      <dl className="grid grid-cols-[7rem_1fr] gap-y-2 text-sm">
-        <dt className="text-gray-600">Email</dt>
-        <dd>
-          <a className="underline" href={`mailto:${CONTACT.email}`}>
-            {CONTACT.email}
-          </a>
-        </dd>
-        <dt className="text-gray-600">Phone</dt>
-        <dd>{CONTACT.phone}</dd>
-        <dt className="text-gray-600">Address</dt>
-        <dd>{CONTACT.address}</dd>
-        <dt className="text-gray-600">Office hours</dt>
-        <dd>{CONTACT.hours}</dd>
-      </dl>
+      <>
+        <dl className="grid grid-cols-[7rem_1fr] gap-y-2 text-sm">
+          {CONTACT.email && (
+            <>
+              <dt className="text-gray-600">Email</dt>
+              <dd>
+                <a className="underline" href={`mailto:${CONTACT.email}`}>
+                  {CONTACT.email}
+                </a>
+              </dd>
+            </>
+          )}
+          {CONTACT.phone && (
+            <>
+              <dt className="text-gray-600">Phone</dt>
+              <dd>{CONTACT.phone}</dd>
+            </>
+          )}
+          {CONTACT.address && (
+            <>
+              <dt className="text-gray-600">Address</dt>
+              <dd>{CONTACT.address}</dd>
+            </>
+          )}
+          {CONTACT.hours && (
+            <>
+              <dt className="text-gray-600">Office hours</dt>
+              <dd>{CONTACT.hours}</dd>
+            </>
+          )}
+        </dl>
+        {CONTACT.note && <p className="text-sm text-gray-600 mt-4 max-w-xl">{CONTACT.note}</p>}
+      </>
+    ),
+  },
+  about: {
+    title: 'About this project',
+    render: () => (
+      <div className="flex flex-col gap-3 max-w-2xl">
+        {ABOUT.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
     ),
   },
 }
