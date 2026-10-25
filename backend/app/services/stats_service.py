@@ -1,7 +1,7 @@
 """Queries for the ERP statistics view (SRD FR-11). Routes in blueprints/admin_stats.py stay thin.
 
-Contents: the seat matrix (read, validate, update). The summary, programme and registration
-queries are added below as they are built.
+Contents: the seat matrix (read, validate, update), the summary cards, the per-programme table and
+the daily registrations (counted by India-time day).
 """
 import logging
 import re
@@ -145,6 +145,7 @@ def get_programmes() -> list[dict]:
 
 
 # ----------------------------------------------------------------- registrations
+IST = timezone(timedelta(hours=5, minutes=30))  # India has no daylight saving; keep in sync with the SQL below
 MAX_RANGE_DAYS = 366
 DEFAULT_RANGE_DAYS = 30
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -164,8 +165,8 @@ def _parse_day(value: str, label: str) -> date:
 
 
 def parse_range(from_raw, to_raw) -> tuple[date, date]:
-    """Turn the query parameters into (start, end), both inclusive. Defaults: the last 30 days (UTC)."""
-    today = datetime.now(timezone.utc).date()  # the schema stores naive UTC timestamps
+    """Turn the query parameters into (start, end), both inclusive. Defaults: the last 30 days (India time)."""
+    today = datetime.now(IST).date()  # days are India-time days (the schema stores naive UTC timestamps)
     end = _parse_day(to_raw, "to") if to_raw else today
     start = _parse_day(from_raw, "from") if from_raw else end - timedelta(days=DEFAULT_RANGE_DAYS - 1)
     if start > end:
@@ -180,11 +181,13 @@ def get_registrations(start: date, end: date) -> list[dict]:
 
     The range is cast to timestamp on purpose: generate_series on plain dates would pick the
     timestamptz variant, and created_at is a naive (timestamp without time zone) UTC column.
+    A day is an India-time day: it starts at 00:00 IST, which is 18:30 UTC the evening before.
     """
     rows = db.session.execute(text(
         "SELECT CAST(d AS date) AS day, count(s.id) AS count "
         "FROM generate_series(CAST(:start AS timestamp), CAST(:end AS timestamp), interval '1 day') AS d "
-        "LEFT JOIN students s ON s.created_at >= d AND s.created_at < d + interval '1 day' "
+        "LEFT JOIN students s ON s.created_at >= d - interval '5 hours 30 minutes' "
+        "AND s.created_at < d + interval '1 day' - interval '5 hours 30 minutes' "
         "GROUP BY d ORDER BY d"
     ), {"start": start, "end": end}).all()
     return [{"date": r.day.isoformat(), "count": int(r.count)} for r in rows]

@@ -23,10 +23,6 @@ def _fail(message, status=400):
     return jsonify({"success": False, "error": message}), status
 
 
-def _not_implemented():
-    return jsonify({"success": False, "error": "Not implemented"}), 501
-
-
 @admin_stats_bp.route("/stats/summary", methods=["GET"])
 @admin_required
 def stats_summary():
@@ -77,5 +73,9 @@ def set_seats():
         return _fail("Could not save the seat numbers. Please try again.", 500)
 
     if changes:
-        admin_service.write_audit(g.admin.id, "UPDATE_SEATS", details={"changes": changes})
+        try:
+            admin_service.write_audit(g.admin.id, "UPDATE_SEATS", details={"changes": changes})
+        except Exception:
+            # The seats are already saved: don't report a failure for a change that worked.
+            log.exception("could not write the UPDATE_SEATS audit entry")
     return _ok({"seats": stats_service.get_seats(), "changed": len(changes)})
