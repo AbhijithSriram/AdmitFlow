@@ -7,7 +7,7 @@ import FormStep5 from '../components/FormStep5';
 import FormStep6 from '../components/FormStep6';
 import FormStep7 from '../components/FormStep7';
 import FormStepNav from '../components/FormStepNav';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient, applicationApi } from '../api/client';
 import AppHeader from '../components/AppHeader';
 import { GUIDELINES, isUgProgramme } from '../content/institution';
@@ -59,7 +59,14 @@ function ApplicationFormBody() {
   const [loadError, setLoadError] = useState('');
   const [applicationId, setApplicationId] = useState(null);
   const [resumeId, setResumeId] = useState(null);
-  const [currentStep, setCurrentStep] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const askedStepRef = useRef(searchParams.get('step')); // the step in the URL when the page loaded
+  const [resumeStep, setResumeStep] = useState(1); // where to land when the URL has no usable step
+  const [furthest, setFurthest] = useState(1); // highest step the student may open
+  const urlStep = Number.parseInt(searchParams.get('step') ?? '', 10);
+  const currentStep =
+    Number.isInteger(urlStep) && urlStep >= 1 && urlStep <= furthest ? urlStep : resumeStep;
+  const goTo = (n) => setSearchParams({ step: String(n) });
   const [draft, setDraft] = useState({});
   const [documents, setDocuments] = useState({});
   const [profile, setProfile] = useState(null);
@@ -68,6 +75,10 @@ function ApplicationFormBody() {
   const [agreeError, setAgreeError] = useState('');
   const busyRef = useRef(false);
   const resumedRef = useRef(false);
+  const draftRef = useRef({}); // always the latest draft, for callbacks that may hold an older closure
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   const { status, triggerSave, saveNow } = useAutoSave({
     appId: applicationId,
@@ -118,13 +129,19 @@ function ApplicationFormBody() {
       resumedRef.current = true;
       setDraft(rehydrate.draft);
       setDocuments(rehydrate.documents);
-      setCurrentStep(Math.min(6, Math.max(1, rehydrate.lastStep)));
+      const resume = Math.min(6, Math.max(1, rehydrate.lastStep));
+      const maxStep = Math.min(7, Math.max(1, rehydrate.lastStep + 1));
+      const asked = Number.parseInt(askedStepRef.current ?? '', 10);
+      const target = Number.isInteger(asked) && asked >= 1 && asked <= maxStep ? asked : resume;
+      setResumeStep(resume);
+      setFurthest(maxStep);
+      setSearchParams({ step: String(target) }, { replace: true });
       setPhase('form');
     } else if (rehydrate.error) {
       setLoadError(rehydrate.error);
       setPhase('error');
     }
-  }, [resumeId, rehydrate]);
+  }, [resumeId, rehydrate, setSearchParams]);
 
   // 3. "I Agree & Proceed": /app/start runs only here.
   const handleAgree = async () => {
@@ -150,16 +167,30 @@ function ApplicationFormBody() {
   // switches between the two, the answers saved for the other kind are cleared (and the step starts
   // blank) instead of lingering in the draft, the PDF and the admin's view.
   const resetAcademicIfLevelChanged = async (newProgramme) => {
-    const academic = draft['4'];
-    const previous = draft['3']?.programme;
+    const current = draftRef.current;
+    const academic = current['4'];
+    const previous = current['3']?.programme;
     if (!academic || Object.keys(academic).length === 0 || !previous) return;
     if (isUgProgramme(previous) === isUgProgramme(newProgramme)) return;
     try {
       await applicationApi.saveDraftStep(applicationId, 4, {});
+      draftRef.current = { ...draftRef.current, 4: {} };
       setDraft((prev) => ({ ...prev, 4: {} }));
     } catch {
       // Not fatal: Step 4 rebuilds its payload from the fields that apply when it is next saved.
     }
+  };
+
+  // Every auto-save also updates the local draft, so the browser Back/Forward buttons (which skip
+  // Save & Next) never leave a step showing older answers. On Step 3 the undergraduate/postgraduate
+  // check runs here too, so it applies however the student got to the step.
+  const handleAutoSave = (data) => {
+    triggerSave(data);
+    if (!isPlainObject(data)) return;
+    const step = currentStep;
+    if (step === 3 && data.programme) resetAcademicIfLevelChanged(data.programme);
+    draftRef.current = { ...draftRef.current, [String(step)]: data };
+    setDraft((prev) => ({ ...prev, [String(step)]: data }));
   };
 
   // Next: save the full step, advance ONLY if the save is confirmed (FR-6.2).
@@ -179,7 +210,9 @@ function ApplicationFormBody() {
       }
       setDraft((prev) => ({ ...prev, [String(currentStep)]: stepData }));
       if (currentStep === 3) await resetAcademicIfLevelChanged(stepData.programme);
-      setCurrentStep((s) => Math.min(s + 1, 7));
+      const next = Math.min(currentStep + 1, 7);
+      setFurthest((f) => Math.max(f, next));
+      goTo(next);
     } finally {
       busyRef.current = false;
     }
@@ -199,7 +232,7 @@ function ApplicationFormBody() {
         }
         setDraft((prev) => ({ ...prev, [String(currentStep)]: stepData }));
       }
-      setCurrentStep((s) => Math.max(s - 1, 1));
+      goTo(Math.max(currentStep - 1, 1));
     } finally {
       busyRef.current = false;
     }
@@ -209,7 +242,7 @@ function ApplicationFormBody() {
   const goToStep = (n) => {
     if (busyRef.current) return;
     setSaveError('');
-    setCurrentStep(n);
+    goTo(n);
   };
 
   const handleDocumentUploaded = (docType, objectName) => {
@@ -237,7 +270,7 @@ function ApplicationFormBody() {
   }
 
   const stepData = draft[String(currentStep)] || {};
-  const common = { applicationId, onAutoSave: triggerSave, profile };
+  const common = { applicationId, onAutoSave: handleAutoSave, profile };
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md my-8">
