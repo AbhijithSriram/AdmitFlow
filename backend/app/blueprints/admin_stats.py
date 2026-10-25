@@ -3,12 +3,24 @@
 Registered at /api/admin (so the admin session cookie, which is scoped to that path, is sent).
 The contract is in REMAINING_WORK.md section 3.
 """
+import logging
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, g, jsonify, request
 
+from app.extensions import db
 from app.middleware.admin_guard import admin_required
+from app.services import admin_service, stats_service
 
+log = logging.getLogger(__name__)
 admin_stats_bp = Blueprint("admin_stats", __name__)
+
+
+def _ok(data=None, status=200):
+    return jsonify({"success": True, "data": data if data is not None else {}}), status
+
+
+def _fail(message, status=400):
+    return jsonify({"success": False, "error": message}), status
 
 
 def _not_implemented():
@@ -40,11 +52,25 @@ def stats_registrations():
 @admin_required
 def get_seats():
     """The seat matrix (programme, specialisation, seats)."""
-    return _not_implemented()
+    return _ok({"seats": stats_service.get_seats()})
 
 
 @admin_stats_bp.route("/seats", methods=["PUT"])
 @admin_required
 def set_seats():
-    """Replace seat numbers."""
-    return _not_implemented()
+    """Set seat numbers for the rows sent: body {"seats": [{programme, specialisation, seats}]}."""
+    try:
+        rows = stats_service.validate_seats(request.get_json(silent=True))
+    except stats_service.SeatValidationError as exc:
+        return _fail(str(exc), 400)
+
+    try:
+        changes = stats_service.set_seats(rows)
+    except Exception:
+        db.session.rollback()
+        log.exception("seat update failed")
+        return _fail("Could not save the seat numbers. Please try again.", 500)
+
+    if changes:
+        admin_service.write_audit(g.admin.id, "UPDATE_SEATS", details={"changes": changes})
+    return _ok({"seats": stats_service.get_seats(), "changed": len(changes)})
