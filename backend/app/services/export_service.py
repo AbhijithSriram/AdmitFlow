@@ -15,7 +15,7 @@ from app.services import admin_service, pdf_service
 MAX_ROWS = 10_000
 
 HEADERS = ["Name", "Email", "Phone", "Date of birth", "Gender", "Registered on",
-           "Stage", "Payment", "Programme", "Specialisation"]
+           "Stage", "Payment", "Programme", "Specialisation", "Aptitude score"]
 
 _STAGE_LABELS = {"NOT_STARTED": "Not started", "IN_PROGRESS": "In progress",
                  "PAYMENT_PENDING": "Payment pending", "PAID": "Submitted & paid"}
@@ -53,7 +53,16 @@ def fetch_rows(filters: dict) -> list[list[str]]:
         _PAYMENT_LABELS.get(r.payment_status, r.payment_status),
         r.programme or "",
         r.specialisation or "",
+        _score(r.aptitude_score),
     ] for r in rows]
+
+
+def _score(value) -> str:
+    """The applicant's latest submitted aptitude score (admin_service.applicant_query), as '7' or '7.5';
+    empty when no test has been submitted."""
+    if value is None:
+        return ""
+    return f"{value:.2f}".rstrip("0").rstrip(".")
 
 
 def safe_cell(value: str) -> str:

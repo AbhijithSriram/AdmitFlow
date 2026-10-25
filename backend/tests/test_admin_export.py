@@ -44,6 +44,38 @@ def test_csv_has_a_header_row_and_one_row_per_applicant(logged_in, make_student)
     assert (ravi["Stage"], ravi["Payment"], ravi["Programme"]) == ("Not started", "No attempt", "")
 
 
+def test_the_latest_submitted_aptitude_score_is_exported(logged_in, make_student):
+    from app.extensions import db
+    from app.models import Application, TestPaper, TestSubmission
+
+    scored = make_student(name="Meena Iyer", status="PAID", payment="SUCCESS")
+    make_student(name="Ravi Kumar", status="PAID", payment="SUCCESS")   # assigned nothing: empty cell
+    application = Application.query.filter_by(student_id=scored.id).one()
+    now = datetime.utcnow()
+    for title, score, submitted in [("Old test", 4, now - timedelta(days=2)), ("New test", 7.5, now)]:
+        paper = TestPaper(title=title, duration_minutes=10, total_marks=10, pass_marks=5, is_published=True)
+        db.session.add(paper)
+        db.session.flush()
+        db.session.add(TestSubmission(application_id=application.id, test_paper_id=paper.id,
+                                      score=score, started_at=submitted, submitted_at=submitted))
+    db.session.commit()
+
+    rows = _csv_rows(logged_in.get(CSV_URL))
+    by_name = {r[0]: dict(zip(rows[0], r)) for r in rows[1:]}
+
+    assert by_name["Meena Iyer"]["Aptitude score"] == "7.5"   # the most recent submission, not the first
+    assert by_name["Ravi Kumar"]["Aptitude score"] == ""
+
+
+def test_scores_are_formatted_without_trailing_zeros():
+    from decimal import Decimal
+
+    assert export_service._score(Decimal("7.00")) == "7"
+    assert export_service._score(Decimal("7.50")) == "7.5"
+    assert export_service._score(Decimal("0.00")) == "0"
+    assert export_service._score(None) == ""
+
+
 def test_export_uses_exactly_the_same_filters_and_order_as_the_applicant_table(logged_in, make_student):
     now = datetime.utcnow()
     for i, (status, payment) in enumerate([("PAID", "SUCCESS"), ("PAYMENT_PENDING", "FAILED"),
