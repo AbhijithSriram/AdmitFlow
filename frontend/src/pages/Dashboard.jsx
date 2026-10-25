@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { applicationApi, studentApi } from '../api/client'
 import AppHeader from '../components/AppHeader'
 import StatusBadge from '../components/StatusBadge'
 import TestsCard from '../components/TestsCard'
+import { usePayment } from '../hooks/usePayment'
 
 // FR-5: applicant dashboard — status badge, quick actions, navigation links.
 export default function Dashboard() {
@@ -11,26 +12,33 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [receiptError, setReceiptError] = useState(null)
+  const [retryMessage, setRetryMessage] = useState(null)
+  const { status: paymentStatus, pay } = usePayment()
+
+  const loadDashboard = useCallback(() => {
+    return studentApi
+      .dashboard()
+      .then((response) => setData(response.data.data))
+      .catch(() => setLoadError('Could not load your dashboard. Try refreshing.'))
+      .finally(() => setLoading(false))
+  }, [])
 
   useEffect(() => {
-    let cancelled = false
+    loadDashboard()
+  }, [loadDashboard])
 
-    studentApi
-      .dashboard()
-      .then((response) => {
-        if (!cancelled) setData(response.data.data)
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError('Could not load your dashboard. Try refreshing.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
+  // FR-6.9: after a failed or abandoned payment the dashboard offers "Retry Payment", which opens the
+  // Razorpay checkout again straight from here (a fresh order is created; the old attempt stays FAILED).
+  const handleRetryPayment = async () => {
+    setRetryMessage(null)
+    try {
+      await pay() // resolves only after the server has verified the signature
+      setRetryMessage({ ok: true, text: 'Payment received. Your confirmation email is on its way.' })
+    } catch {
+      setRetryMessage({ ok: false, text: 'The payment was not completed. You can try again.' })
     }
-  }, [])
+    await loadDashboard()
+  }
 
   const handleViewReceipt = async () => {
     setReceiptError(null)
@@ -51,6 +59,7 @@ export default function Dashboard() {
   }
 
   const status = data?.status ?? 'NOT_STARTED'
+  const paymentBusy = paymentStatus === 'creating' || paymentStatus === 'processing'
 
   return (
     <div className="min-h-screen">
@@ -67,8 +76,21 @@ export default function Dashboard() {
         )}
 
         <div className="flex flex-wrap gap-3 mt-6">
+          {status === 'PAYMENT_PENDING' && (
+            <button
+              type="button"
+              onClick={handleRetryPayment}
+              disabled={paymentBusy}
+              className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
+            >
+              {paymentBusy ? 'Processing…' : 'Retry Payment'}
+            </button>
+          )}
           {status !== 'PAID' && (
-            <Link to="/application" className="px-4 py-2 rounded bg-black text-white">
+            <Link
+              to="/application"
+              className={`px-4 py-2 rounded ${status === 'PAYMENT_PENDING' ? 'border' : 'bg-black text-white'}`}
+            >
               {status === 'NOT_STARTED' ? 'Start Application' : 'Continue Application'}
             </Link>
           )}
@@ -83,6 +105,11 @@ export default function Dashboard() {
         </div>
 
         {receiptError && <p className="text-red-600 text-sm mt-2">{receiptError}</p>}
+        {retryMessage && (
+          <p className={`text-sm mt-2 ${retryMessage.ok ? 'text-green-700' : 'text-red-600'}`} role="status">
+            {retryMessage.text}
+          </p>
+        )}
 
         {/* Assigned aptitude tests (FR-10). Renders nothing until Person 1 builds it. */}
         {status === 'PAID' && <TestsCard />}
