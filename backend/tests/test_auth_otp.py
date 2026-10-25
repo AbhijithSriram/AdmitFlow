@@ -135,3 +135,12 @@ def test_verify_stores_server_side_proof_in_session(client, pending, outbox):
     with client.session_transaction() as sess:
         assert sess["otp_verified"]["student_id"] == str(pending.id)
         assert sess["otp_verified"]["purpose"] == "email_verification"
+
+
+def test_otp_dispatch_is_logged_without_the_code_or_email(client, pending, outbox, caplog):
+    caplog.set_level("INFO")
+    assert _send(client).status_code == 200
+    otp = outbox[0][2]
+    text = "\n".join(r.getMessage() for r in caplog.records if r.name == "app.blueprints.auth")
+    assert f"otp sent student_id={pending.id} purpose=email_verification" in text
+    assert otp not in text and EMAIL not in text

@@ -93,3 +93,13 @@ def test_log_redaction():
     r = logging.LogRecord("x", 30, "", 0, "login password=hunter2 otp: 123456 token=abc", (), None)
     RedactFilter().filter(r)
     assert not any(s in r.msg for s in ("hunter2", "123456", "abc"))
+
+
+def test_log_redaction_catches_passwords_and_otps_in_json_and_prefixed_keys():
+    import logging
+    from app.logging_config import RedactFilter
+    line = 'body={"password": "hunter2", "otp": "654321"} new_password=s3cret-pw raw_otp=111222'
+    r = logging.LogRecord("x", 20, "", 0, "request %s", (line,), None)
+    RedactFilter().filter(r)
+    assert not any(s in r.msg for s in ("hunter2", "654321", "s3cret-pw", "111222"))
+    assert r.msg.count("[REDACTED]") == 4

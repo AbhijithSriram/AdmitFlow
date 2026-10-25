@@ -25,7 +25,7 @@ def _schema():
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-    for name in ("schema.sql", "002_admin_portal.sql"):
+    for name in ("schema.sql", "002_admin_portal.sql", "005_aptitude_tests.sql"):
         cur.execute((MIGRATIONS / name).read_text())
     conn.close()
 

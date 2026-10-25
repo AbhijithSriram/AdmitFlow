@@ -1,45 +1,207 @@
 """Student side of the online aptitude test (SRD FR-10). Owner: Person 1.
 
-Registered at /api/student/tests. Every route needs a student session; the real routes must also
-check that the applicant's application is PAID and that the test is assigned to them. The timer is
-the server's: it is started once and enforced here, never trusted from the browser. The contract
-is in REMAINING_WORK.md section 3.
+Registered at /api/student/tests. Every route needs a student session and a PAID application, and
+only tests assigned to that application (a test_submissions row) on a published paper are visible.
+The timer is the server's: start sets started_at once and the deadline is computed from it, never
+trusted from the browser. The contract is in REMAINING_WORK.md section 3.
 """
+import logging
+from datetime import datetime
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request, session
 
+from app.extensions import db
 from app.middleware.auth_guard import login_required
+from app.models import Application, TestPaper, TestQuestion, TestSubmission
+from app.services import test_service
+from app.services.admin_service import is_uuid
+
+log = logging.getLogger(__name__)
 
 student_tests_bp = Blueprint("student_tests", __name__)
 
 
-def _not_implemented():
-    return jsonify({"success": False, "error": "Not implemented"}), 501
+def _ok(data, status=200):
+    return jsonify({"success": True, "data": data}), status
+
+
+def _fail(message, status):
+    return jsonify({"success": False, "error": message}), status
+
+
+def _iso_utc(value):
+    """The server stores naive UTC; the trailing Z tells the browser so its countdown is right."""
+    return value.isoformat() + "Z" if value else None
+
+
+def _paid_application():
+    """The signed-in student's application if it is PAID, else None (tests are for paid applicants)."""
+    application = Application.query.filter_by(student_id=session["student_id"]).first()
+    return application if application is not None and application.status == "PAID" else None
+
+
+NOT_PAID = "Aptitude tests are available once your application fee has been paid."
+OPTIONS = ("A", "B", "C", "D")
+
+
+def _locked_assignment(application, paper_id):
+    """(submission, paper) for this application's assignment on a published paper, or None.
+    The submission row is locked until the next commit, so two tabs (or a start racing an
+    auto-save) can't both read and write it."""
+    if not is_uuid(paper_id):
+        return None
+    return (
+        db.session.query(TestSubmission, TestPaper)
+        .join(TestPaper, TestPaper.id == TestSubmission.test_paper_id)
+        .filter(TestSubmission.application_id == application.id, TestSubmission.test_paper_id == paper_id,
+                TestPaper.is_published.is_(True))
+        .with_for_update(of=TestSubmission)
+        .first()
+    )
+
+
+def _close_if_expired(sub, paper, application, now):
+    """Lazy submit; commits (releasing the row lock) when it closed the attempt."""
+    if test_service.finalise_if_expired(sub, paper, now):
+        db.session.commit()
+        log.info("test closed at deadline paper_id=%s application_id=%s", paper.id, application.id)
 
 
 @student_tests_bp.route("", methods=["GET"])
 @login_required
 def list_my_tests():
     """Tests assigned to me, each with a status: ASSIGNED, IN_PROGRESS or SUBMITTED."""
-    return _not_implemented()
+    application = _paid_application()
+    if application is None:
+        return _fail(NOT_PAID, 403)
+
+    rows = (
+        db.session.query(TestSubmission, TestPaper)
+        .join(TestPaper, TestPaper.id == TestSubmission.test_paper_id)
+        .filter(TestSubmission.application_id == application.id, TestPaper.is_published.is_(True))
+        .order_by(TestSubmission.assigned_at)
+        .all()
+    )
+    now = datetime.utcnow()
+    if any([test_service.finalise_if_expired(sub, paper, now) for sub, paper in rows]):
+        db.session.commit()
+
+    # Scores are for admins only (team decision 3), so they never appear here.
+    tests = [{
+        "paper_id": paper.id,
+        "title": paper.title,
+        "duration_minutes": paper.duration_minutes,
+        "question_count": len(paper.questions),
+        "status": test_service.status(sub),
+        "deadline": _iso_utc(test_service.deadline(sub, paper)),
+    } for sub, paper in rows]
+    return _ok({"tests": tests})
 
 
 @student_tests_bp.route("/<paper_id>/start", methods=["POST"])
 @login_required
 def start_test(paper_id):
     """Start once (idempotent): returns the questions WITHOUT correct options, and the deadline."""
-    return _not_implemented()
+    application = _paid_application()
+    if application is None:
+        return _fail(NOT_PAID, 403)
+    found = _locked_assignment(application, paper_id)
+    if found is None:
+        return _fail("Test not found.", 404)
+    sub, paper = found
+
+    now = datetime.utcnow()
+    _close_if_expired(sub, paper, application, now)
+    if sub.submitted_at is not None:
+        db.session.commit()  # release the row lock
+        return _fail("You have already submitted this test.", 409)
+
+    if sub.started_at is None:
+        sub.started_at = now
+        log.info("test started paper_id=%s application_id=%s", paper.id, application.id)
+    db.session.commit()
+
+    closes = test_service.deadline(sub, paper)
+    questions = TestQuestion.query.filter_by(test_paper_id=paper.id).order_by(TestQuestion.id).all()
+    return _ok({
+        "paper": {"id": paper.id, "title": paper.title, "duration_minutes": paper.duration_minutes},
+        # Never correct_option or marks: the browser only ever sees the question and its options.
+        "questions": [{
+            "id": q.id,
+            "text": q.question_text,
+            "options": {"A": q.option_a, "B": q.option_b, "C": q.option_c, "D": q.option_d},
+        } for q in questions],
+        "answers": sub.answers or {},
+        "deadline": _iso_utc(closes),
+        "seconds_left": max(0, int((closes - now).total_seconds())),
+    })
 
 
 @student_tests_bp.route("/<paper_id>/answers", methods=["PUT"])
 @login_required
 def save_answers(paper_id):
-    """Save {question_id: "A".."D"}. Refused after the deadline."""
-    return _not_implemented()
+    """Save {question_id: "A".."D"}, merged into the picks saved so far. Ids that are not questions
+    on this paper are ignored. Refused before start, after the deadline and once submitted."""
+    application = _paid_application()
+    if application is None:
+        return _fail(NOT_PAID, 403)
+
+    body = request.get_json(silent=True)
+    picks = body.get("answers") if isinstance(body, dict) else None
+    if not isinstance(picks, dict):
+        return _fail("Send the answers as an object of question id to option.", 400)
+    if any(p not in OPTIONS for p in picks.values()):
+        return _fail("Each answer must be one of A, B, C or D.", 400)
+
+    found = _locked_assignment(application, paper_id)
+    if found is None:
+        return _fail("Test not found.", 404)
+    sub, paper = found
+
+    now = datetime.utcnow()
+    _close_if_expired(sub, paper, application, now)
+    if sub.submitted_at is not None:
+        db.session.commit()  # release the row lock
+        return _fail("This test has ended, so answers can no longer be changed.", 409)
+    if sub.started_at is None:
+        db.session.commit()
+        return _fail("Start the test before answering.", 409)
+
+    on_paper = {str(q.id) for q in paper.questions}
+    # A new dict (not an in-place update) so SQLAlchemy sees the JSONB column change.
+    sub.answers = {**(sub.answers or {}), **{qid: p for qid, p in picks.items() if qid in on_paper}}
+    db.session.commit()
+
+    closes = test_service.deadline(sub, paper)
+    return _ok({"answers": sub.answers, "seconds_left": max(0, int((closes - now).total_seconds()))})
 
 
 @student_tests_bp.route("/<paper_id>/submit", methods=["POST"])
 @login_required
 def submit_test(paper_id):
-    """Grade the saved answers, store the score and set submitted_at."""
-    return _not_implemented()
+    """Grade the saved answers, store the score and set submitted_at. Allowed once. A submit that
+    arrives after the deadline (the page's own auto-submit, a moment late) still closes the
+    attempt, graded on the answers saved in time. The score is never sent back (decision 3)."""
+    application = _paid_application()
+    if application is None:
+        return _fail(NOT_PAID, 403)
+
+    found = _locked_assignment(application, paper_id)
+    if found is None:
+        return _fail("Test not found.", 404)
+    sub, paper = found
+
+    if sub.submitted_at is not None:
+        db.session.commit()  # release the row lock
+        return _fail("You have already submitted this test.", 409)
+    if sub.started_at is None:
+        db.session.commit()
+        return _fail("Start the test before submitting it.", 409)
+
+    now = datetime.utcnow()
+    if not test_service.finalise_if_expired(sub, paper, now):
+        sub.score = test_service.grade(paper, sub.answers)
+        sub.submitted_at = now
+    db.session.commit()
+    log.info("test submitted paper_id=%s application_id=%s", paper.id, application.id)
+    return _ok({"status": test_service.status(sub), "submitted_at": _iso_utc(sub.submitted_at)})

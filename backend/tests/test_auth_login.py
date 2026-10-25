@@ -142,3 +142,44 @@ def test_forgot_password_flow_changes_password_and_clears_lockout(client, studen
 
     assert _login(client, PASSWORD).status_code == 401  # old password no longer works
     assert _login(client, new_password).status_code == 200  # and the lock is gone
+
+
+# --- audit logging (SRD NFR-6): student id only, never the email or the password ---
+
+def _auth_log_text(caplog):
+    return "\n".join(r.getMessage() for r in caplog.records if r.name == "app.blueprints.auth")
+
+
+def test_wrong_password_is_logged_with_student_id_only(client, student, caplog):
+    caplog.set_level("INFO")
+    _login(client, password="wrong-guess-99")
+    text = _auth_log_text(caplog)
+    assert f"login failed student_id={student.id}" in text
+    assert EMAIL not in text and "wrong-guess-99" not in text
+
+
+def test_unknown_account_login_failure_is_logged_without_the_email(client, caplog):
+    caplog.set_level("INFO")
+    _login(client, email="nobody@example.com", password="wrong-guess-99")
+    text = _auth_log_text(caplog)
+    assert "login failed" in text
+    assert "nobody@example.com" not in text and "wrong-guess-99" not in text
+
+
+def test_login_refused_while_locked_is_logged(client, student, caplog):
+    from app.extensions import db
+
+    student.locked_until = datetime.utcnow() + timedelta(minutes=10)
+    db.session.commit()
+    caplog.set_level("INFO")
+    assert _login(client).status_code == 423
+    text = _auth_log_text(caplog)
+    assert f"login refused, account locked student_id={student.id}" in text
+    assert PASSWORD not in text
+
+
+def test_logout_is_logged(client, student, caplog):
+    _login(client)
+    caplog.set_level("INFO")
+    client.post("/api/auth/logout")
+    assert f"student logout student_id={student.id}" in _auth_log_text(caplog)
