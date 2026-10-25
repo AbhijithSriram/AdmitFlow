@@ -187,6 +187,7 @@ fi
 app_psql -f "$APP_DIR/backend/migrations/002_admin_portal.sql" >/dev/null
 app_psql -f "$APP_DIR/backend/migrations/003_otp_attempts.sql" >/dev/null
 app_psql -f "$APP_DIR/backend/migrations/004_swap_programme_and_academic_steps.sql" >/dev/null
+app_psql -f "$APP_DIR/backend/migrations/005_aptitude_tests.sql" >/dev/null
 echo "database ready"
 
 # ------------------------------------------------------------ 4. file storage

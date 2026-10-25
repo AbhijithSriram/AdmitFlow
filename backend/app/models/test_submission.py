@@ -15,3 +15,6 @@ class TestSubmission(db.Model):
     answers = db.Column(JSONB, nullable=False, default=dict)  # {question_id: selected_option}
     score = db.Column(db.Numeric(6, 2), nullable=True)
     submitted_at = db.Column(db.DateTime, nullable=True)
+    # migration 005: the row is created at assign time; the student's first start sets started_at
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    started_at = db.Column(db.DateTime, nullable=True)

@@ -61,7 +61,14 @@ def test_admin_stubs_answer_501_to_an_admin(logged_in, method, path):
     assert resp.json == {"success": False, "error": "Not implemented"}
 
 
-@pytest.mark.parametrize("method, path", STUDENT_ROUTES)
+# GET /api/student/tests and start are implemented: see test_student_tests.py.
+STUDENT_STUB_ROUTES = [
+    ("PUT", "/api/student/tests/p1/answers"),
+    ("POST", "/api/student/tests/p1/submit"),
+]
+
+
+@pytest.mark.parametrize("method, path", STUDENT_STUB_ROUTES)
 def test_student_stubs_answer_501_to_a_student(client, make_student, method, path):
     student = make_student()
     with client.session_transaction() as sess:
