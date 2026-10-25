@@ -5,6 +5,7 @@ import { humanize, isInternalKey } from '../../utils/fieldLabels'
 import { errorMessage, formatDate, formatDateTime } from './adminUtils'
 
 const STEP_TITLES = { 1: 'Personal details', 2: 'Address', 3: 'Programme preference', 4: 'Academic details', 5: 'Entrance / test details', 6: 'ID proof details' }
+const APTITUDE_STATUS = { ASSIGNED: 'Assigned, not started', IN_PROGRESS: 'In progress', SUBMITTED: 'Submitted' }
 const DOC_LABELS = { photo: 'Photo', signature: 'Signature', id_proof: 'ID proof', application_pdf: 'Application PDF' }
 
 const show = (v) => {
@@ -144,6 +145,25 @@ export default function StudentDetailPanel({ studentId, onClose, onDelete, onUna
                 <Fields rows={Object.entries(data).filter(([k]) => !isInternalKey(k)).map(([k, v]) => [humanize(k), v])} />
               </Section>
             ))}
+
+            {detail.aptitude?.length > 0 && (
+              <Section title="Aptitude test">
+                <ul className="text-sm flex flex-col gap-1">
+                  {detail.aptitude.map((t) => (
+                    <li key={t.paper_id} className="flex flex-wrap gap-x-4">
+                      <span className="font-medium">{t.title}</span>
+                      <span>{APTITUDE_STATUS[t.status]}</span>
+                      {t.score !== null && (
+                        <span>
+                          {t.score} / {t.total_marks} ({t.passed ? 'passed' : 'not passed'}; pass mark {t.pass_marks})
+                        </span>
+                      )}
+                      {t.submitted_at && <span className="text-slate-600">{formatDateTime(t.submitted_at)}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
 
             {detail.payments.length > 0 && (
               <Section title="Payment attempts">

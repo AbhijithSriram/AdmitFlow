@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { adminApi } from '../../api/client'
 import StatusBadge from '../../components/StatusBadge'
 import DeleteStudentModal from './DeleteStudentModal'
@@ -16,6 +16,7 @@ const COLUMNS = [
   { key: 'registered_at', label: 'Registered', sortable: true },
   { key: 'stage', label: 'Stage', sortable: true },
   { key: 'payment_status', label: 'Payment' },
+  { key: 'aptitude_score', label: 'Aptitude' },
 ]
 
 const PAYMENT_STYLE = {
@@ -81,6 +82,11 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-slate-100">
       <header className="flex items-center gap-4 bg-slate-900 text-white px-6 py-3">
         <strong>AdmitFlow staff</strong>
+        <nav aria-label="Admin sections" className="flex gap-4 text-sm ml-4">
+          <Link to="/admin/dashboard" className="underline">Applicants</Link>
+          <Link to="/admin/stats" className="hover:underline">Statistics</Link>
+          <Link to="/admin/tests" className="hover:underline">Tests</Link>
+        </nav>
         <span className="ml-auto text-slate-300 text-sm">{admin?.name}</span>
         <button onClick={signOut} className="text-sm border border-slate-500 rounded-md px-3 py-1 hover:bg-slate-700">
           Sign out
@@ -132,7 +138,7 @@ export default function AdminDashboard() {
         )}
 
         <div className={`overflow-x-auto bg-white border border-slate-200 rounded-lg ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
-          <table className="w-full min-w-[820px] text-sm text-left">
+          <table className="w-full min-w-[900px] text-sm text-left">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 {COLUMNS.map((c) => (
@@ -169,6 +175,7 @@ export default function AdminDashboard() {
                   <td className="px-3 py-2">
                     <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${PAYMENT_STYLE[s.payment_status]}`}>{PAYMENT_LABELS[s.payment_status]}</span>
                   </td>
+                  <td className="px-3 py-2 whitespace-nowrap">{s.aptitude_score ?? '—'}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button onClick={() => setOpenId(s.id)} className="text-sm border border-slate-400 rounded-md px-2 py-1 mr-2 hover:bg-slate-100">
                       View
@@ -181,7 +188,7 @@ export default function AdminDashboard() {
               ))}
               {!loading && data.students.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-slate-600">
+                  <td colSpan={8} className="px-3 py-10 text-center text-slate-600">
                     {query.q || query.stage || query.payment_status
                       ? 'No applicants match these filters. Clear a filter or change the search.'
                       : 'No applicants have registered yet.'}

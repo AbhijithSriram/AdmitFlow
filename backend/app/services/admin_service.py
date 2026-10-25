@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.extensions import bcrypt, db
 from app.models import Admin, AdminSession, Application, AuditLog, FormDraft, OtpToken, Payment, Student
 from app.models.test_submission import TestSubmission
+from app.models.test_paper import TestPaper
 from app.services import minio_service
 
 log = logging.getLogger(__name__)
@@ -173,11 +174,17 @@ def applicant_query(sort: str, order: str, q: str, stage: str, payment_status: s
     """
     stage_expr = func.coalesce(Application.status, "NOT_STARTED")
     pay_expr = _payment_status_expr()
+    # Aptitude score shown per applicant: the score of their most recently SUBMITTED test, else NULL.
+    # (An applicant normally has one test; this rule keeps the column to a single number.)
+    score_expr = (select(TestSubmission.score)
+                  .where(TestSubmission.application_id == Application.id, TestSubmission.submitted_at.is_not(None))
+                  .order_by(TestSubmission.submitted_at.desc()).limit(1).scalar_subquery())
 
     query = (
         select(Student.id, Student.full_name, Student.email, Student.phone, Student.created_at,
                Student.date_of_birth, Student.gender, Application.programme, Application.specialisation,
-               stage_expr.label("stage"), pay_expr.label("payment_status"))
+               stage_expr.label("stage"), pay_expr.label("payment_status"),
+               score_expr.label("aptitude_score"))
         .select_from(Student)
         .outerjoin(Application, Application.student_id == Student.id)
     )
@@ -209,7 +216,9 @@ def list_students(page: int, sort: str, order: str, q: str, stage: str, payment_
     return {
         "students": [{"id": r.id, "name": r.full_name, "email": r.email, "phone": r.phone,
                       "registered_at": r.created_at.isoformat(), "stage": r.stage,
-                      "payment_status": r.payment_status} for r in rows],
+                      "payment_status": r.payment_status,
+                      "aptitude_score": float(r.aptitude_score) if r.aptitude_score is not None else None}
+                     for r in rows],
         "page": page, "per_page": PER_PAGE, "total": total, "total_pages": total_pages,
     }
 
@@ -228,6 +237,23 @@ def _document(object_name: str | None) -> dict:
     except Exception:  # MinIO briefly down must not break the whole detail page
         log.exception("could not presign document for %s", object_name)
         return {"present": True, "url": None, "error": "File storage is unavailable right now."}
+
+
+def aptitude_for_application(application_id: str) -> list[dict]:
+    """Every aptitude test assigned to an application, with status and score (admin view only)."""
+    rows = db.session.execute(
+        select(TestSubmission, TestPaper).join(TestPaper, TestPaper.id == TestSubmission.test_paper_id)
+        .where(TestSubmission.application_id == application_id).order_by(TestSubmission.assigned_at)).all()
+    out = []
+    for sub, paper in rows:
+        status = "SUBMITTED" if sub.submitted_at else "IN_PROGRESS" if sub.started_at else "ASSIGNED"
+        score = float(sub.score) if sub.score is not None else None
+        out.append({"paper_id": str(paper.id), "title": paper.title, "status": status, "score": score,
+                    "total_marks": paper.total_marks, "pass_marks": paper.pass_marks,
+                    "passed": None if score is None else score >= paper.pass_marks,
+                    "assigned_at": sub.assigned_at.isoformat(),
+                    "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None})
+    return out
 
 
 def get_student_detail(student_id: str) -> dict | None:
@@ -257,6 +283,7 @@ def get_student_detail(student_id: str) -> dict | None:
                              "razorpay_payment_id": p.razorpay_payment_id,
                              "created_at": p.created_at.isoformat()})
     return {
+        "aptitude": aptitude_for_application(app_row.id) if app_row is not None else [],
         "student": {"id": student.id, "full_name": student.full_name,
                     "date_of_birth": student.date_of_birth.isoformat(), "gender": student.gender,
                     "email": student.email, "phone": student.phone, "email_verified": student.email_verified,

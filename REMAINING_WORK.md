@@ -344,3 +344,7 @@ raise it now, because they decide what gets built.
 5. **Seat numbers:** an admin-editable table (`programme_seats`, migration 006, built by Person 2), seeded with demo values.
 6. **SRD v1.1:** the deviations listed in section 1 (guidelines checkbox, non-PNG photos and signatures, programme before
    academic details) are accepted. Person 3 records them in the SRD.
+7. **Aptitude score column (decided by Person 4):** the applicants table and the applicant detail panel show the score of
+   the applicant's most recently *submitted* test (a dash if none). The detail panel lists every assigned test with its
+   status and score. The value is `aptitude_score` in `admin_service.applicant_query()`, so the export can add it as a
+   column. Admins cannot un-publish a test: a published test cannot be edited or deleted once applicants are assigned.

@@ -34,6 +34,15 @@ STUDENT_ROUTES = [
 # tested in the owner's own test file (for example test_admin_stats.py); the guard tests above still
 # cover them. Add a route here in the same commit that implements it.
 IMPLEMENTED_ADMIN_ROUTES = {
+    ("GET", "/api/admin/tests"),
+    ("POST", "/api/admin/tests"),
+    ("GET", "/api/admin/tests/p1"),
+    ("PUT", "/api/admin/tests/p1"),
+    ("DELETE", "/api/admin/tests/p1"),
+    ("POST", "/api/admin/tests/p1/publish"),
+    ("POST", "/api/admin/tests/p1/assign"),
+    ("GET", "/api/admin/tests/p1/results"),
+    ("POST", "/api/admin/tests/p1/reset/a1"),
     ("GET", "/api/admin/seats"),
     ("PUT", "/api/admin/seats"),
     ("GET", "/api/admin/stats/summary"),
