@@ -4,6 +4,7 @@ conftest.py only loads schema.sql and 002_admin_portal.sql, so the programme_sea
 here by running the real 006 migration file (which also tests that migration).
 """
 import pathlib
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import text
@@ -258,3 +259,67 @@ def test_a_programme_missing_from_the_seat_matrix_still_shows_with_zero_seats(lo
     _set_programme(student, "M.Sc.", "Physics")
     row = _by_name(logged_in)[("M.Sc.", "Physics")]
     assert (row["seats"], row["applied"]) == (0, 1)
+
+
+# ------------------------------------------------------------------ registrations
+REG_URL = "/api/admin/stats/registrations"
+
+
+def _registrations(client, **params):
+    r = client.get(REG_URL, query_string=params)
+    assert r.status_code == 200
+    return r.json["data"]["registrations"]
+
+
+def test_default_range_is_the_last_30_days_ending_today(logged_in):
+    rows = _registrations(logged_in)
+    assert len(rows) == 30
+    assert rows[-1]["date"] == datetime.now(timezone.utc).date().isoformat()
+    assert all(row["count"] == 0 for row in rows)
+
+
+def test_days_without_registrations_are_filled_with_zero(logged_in, make_student):
+    make_student(created=datetime(2026, 10, 1, 9, 0))
+    make_student(created=datetime(2026, 10, 1, 17, 30))
+    make_student(created=datetime(2026, 10, 3, 12, 0))
+    rows = _registrations(logged_in, **{"from": "2026-10-01", "to": "2026-10-04"})
+    assert rows == [
+        {"date": "2026-10-01", "count": 2},
+        {"date": "2026-10-02", "count": 0},
+        {"date": "2026-10-03", "count": 1},
+        {"date": "2026-10-04", "count": 0},
+    ]
+
+
+def test_both_ends_are_included_and_nothing_outside_is_counted(logged_in, make_student):
+    make_student(created=datetime(2026, 9, 30, 23, 59, 59))   # just before the range
+    make_student(created=datetime(2026, 10, 1, 0, 0, 0))      # first second of the range
+    make_student(created=datetime(2026, 10, 2, 23, 59, 59))   # last second of the range
+    make_student(created=datetime(2026, 10, 3, 0, 0, 0))      # just after the range
+    rows = _registrations(logged_in, **{"from": "2026-10-01", "to": "2026-10-02"})
+    assert [row["count"] for row in rows] == [1, 1]
+
+
+def test_a_single_day_range(logged_in, make_student):
+    make_student(created=datetime(2026, 10, 5, 8, 0))
+    assert _registrations(logged_in, **{"from": "2026-10-05", "to": "2026-10-05"}) == [
+        {"date": "2026-10-05", "count": 1}]
+
+
+def test_only_to_given_means_the_30_days_ending_there(logged_in):
+    rows = _registrations(logged_in, to="2026-10-30")
+    assert len(rows) == 30 and rows[0]["date"] == "2026-10-01" and rows[-1]["date"] == "2026-10-30"
+
+
+@pytest.mark.parametrize("params", [
+    pytest.param({"from": "01-10-2026"}, id="wrong-format"),
+    pytest.param({"from": "2026-13-01"}, id="impossible-date"),
+    pytest.param({"from": "20261001"}, id="compact-iso-form"),
+    pytest.param({"to": "tomorrow"}, id="not-a-date"),
+    pytest.param({"from": "2026-10-05", "to": "2026-10-01"}, id="from-after-to"),
+    pytest.param({"from": "2024-01-01", "to": "2026-10-01"}, id="range-too-long"),
+])
+def test_bad_ranges_are_rejected(logged_in, params):
+    r = logged_in.get(REG_URL, query_string=params)
+    assert r.status_code == 400
+    assert r.json["success"] is False and isinstance(r.json["error"], str)

@@ -4,6 +4,8 @@ Contents: the seat matrix (read, validate, update). The summary, programme and r
 queries are added below as they are built.
 """
 import logging
+import re
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
 
@@ -140,3 +142,49 @@ def get_programmes() -> list[dict]:
     )).all()
     return [{"programme": r.programme, "specialisation": r.specialisation, "seats": int(r.seats),
              "applied": int(r.applied), "paid": int(r.paid), "shortlisted": int(r.shortlisted)} for r in rows]
+
+
+# ----------------------------------------------------------------- registrations
+MAX_RANGE_DAYS = 366
+DEFAULT_RANGE_DAYS = 30
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+class RangeError(ValueError):
+    """The ?from= / ?to= values are not usable. The message is safe to show to the admin."""
+
+
+def _parse_day(value: str, label: str) -> date:
+    if not _ISO_DATE.match(value):
+        raise RangeError(f"'{label}' must be a date like 2026-10-01.")
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise RangeError(f"'{label}' is not a real calendar date.") from None
+
+
+def parse_range(from_raw, to_raw) -> tuple[date, date]:
+    """Turn the query parameters into (start, end), both inclusive. Defaults: the last 30 days (UTC)."""
+    today = datetime.now(timezone.utc).date()  # the schema stores naive UTC timestamps
+    end = _parse_day(to_raw, "to") if to_raw else today
+    start = _parse_day(from_raw, "from") if from_raw else end - timedelta(days=DEFAULT_RANGE_DAYS - 1)
+    if start > end:
+        raise RangeError("'from' must not be after 'to'.")
+    if (end - start).days + 1 > MAX_RANGE_DAYS:
+        raise RangeError(f"Choose a range of at most {MAX_RANGE_DAYS} days.")
+    return start, end
+
+
+def get_registrations(start: date, end: date) -> list[dict]:
+    """One row per day from start to end inclusive; days with no sign-ups have count 0.
+
+    The range is cast to timestamp on purpose: generate_series on plain dates would pick the
+    timestamptz variant, and created_at is a naive (timestamp without time zone) UTC column.
+    """
+    rows = db.session.execute(text(
+        "SELECT CAST(d AS date) AS day, count(s.id) AS count "
+        "FROM generate_series(CAST(:start AS timestamp), CAST(:end AS timestamp), interval '1 day') AS d "
+        "LEFT JOIN students s ON s.created_at >= d AND s.created_at < d + interval '1 day' "
+        "GROUP BY d ORDER BY d"
+    ), {"start": start, "end": end}).all()
+    return [{"date": r.day.isoformat(), "count": int(r.count)} for r in rows]

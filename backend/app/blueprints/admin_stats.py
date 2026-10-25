@@ -45,7 +45,12 @@ def stats_programmes():
 @admin_required
 def stats_registrations():
     """Registrations per day between ?from= and ?to= (days with none included, as zero)."""
-    return _not_implemented()
+    try:
+        start, end = stats_service.parse_range(request.args.get("from"), request.args.get("to"))
+    except stats_service.RangeError as exc:
+        return _fail(str(exc), 400)
+    return _ok({"registrations": stats_service.get_registrations(start, end),
+                "from": start.isoformat(), "to": end.isoformat()})
 
 
 @admin_stats_bp.route("/seats", methods=["GET"])
