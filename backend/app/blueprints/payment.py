@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime
 from decimal import Decimal
@@ -9,6 +10,7 @@ from app.middleware.auth_guard import login_required
 from app.models import Application, FormDraft, Payment, Student
 from app.services import email_service, minio_service, payment_service, pdf_service
 
+log = logging.getLogger(__name__)
 payment_bp = Blueprint("payment", __name__)
 
 # Application fee in paise (Razorpay's smallest currency unit for INR). Overridable via
@@ -107,6 +109,8 @@ def create_payment_order():
     )
     db.session.add(payment)
     db.session.commit()
+    log.info("payment order created order=%s application=%s amount_paise=%s",
+             order["id"], application.id, APPLICATION_FEE_PAISE)
 
     return (
         jsonify(
@@ -123,6 +127,20 @@ def create_payment_order():
         ),
         201,
     )
+
+
+def _mark_attempt_failed(application: Application, payment) -> bool:
+    """Record a failed attempt without ever undoing a success. The payment becomes FAILED only if it
+    is still just CREATED, and an IN_PROGRESS application becomes PAYMENT_PENDING (a PAID one is left
+    alone, a PAYMENT_PENDING one already is). Returns True if anything changed."""
+    changed = False
+    if payment is not None and payment.status == "CREATED":
+        payment.status = "FAILED"
+        changed = True
+    if application.status == "IN_PROGRESS":
+        application.status = "PAYMENT_PENDING"
+        changed = True
+    return changed
 
 
 @payment_bp.route("/app/payment/confirm", methods=["POST"])
@@ -145,20 +163,35 @@ def confirm_payment():
     if payment is None:
         return jsonify({"success": False, "error": "Unknown order"}), 404
 
+    # A repeat of a confirmation we already processed (double click, a retried request): answer
+    # the same way and do nothing again, so the applicant is not emailed a second time.
+    if payment.status == "SUCCESS":
+        log.info("payment confirm repeated order=%s application=%s", order_id, application.id)
+        return jsonify({"success": True, "data": {"status": application.status}})
+
     if not payment_service.verify_signature(order_id, razorpay_payment_id, signature):
-        payment.status = "FAILED"
-        application.status = "PAYMENT_PENDING"
+        log.warning("payment signature verification failed order=%s application=%s", order_id, application.id)
+        _mark_attempt_failed(application, payment)
         db.session.commit()
         return jsonify({"success": False, "error": "Payment verification failed"}), 400
 
     # Payment.status and Application.status flip together, committed once, so a
     # half-applied state (paid in one table but not the other) can never be observed.
+    first_payment = application.status != "PAID"
     payment.razorpay_payment_id = razorpay_payment_id
     payment.razorpay_signature = signature
     payment.status = "SUCCESS"
     application.status = "PAID"
     db.session.commit()
 
+    if not first_payment:
+        # The application was already paid through another order, so this applicant was charged twice.
+        # The payment is recorded (so it can be refunded) but nothing is generated or sent again.
+        log.warning("second successful payment for an already paid application order=%s application=%s",
+                    order_id, application.id)
+        return jsonify({"success": True, "data": {"status": application.status}})
+
+    log.info("payment confirmed order=%s payment=%s application=%s", order_id, razorpay_payment_id, application.id)
     _generate_and_deliver_confirmation(student, application, payment)
 
     return jsonify({"success": True, "data": {"status": application.status}})
@@ -175,12 +208,14 @@ def payment_failed():
     if application is None:
         return jsonify({"success": False, "error": "No application found"}), 404
 
+    payment = None
     if order_id:
         payment = Payment.query.filter_by(application_id=application.id, razorpay_order_id=order_id).first()
-        if payment:
-            payment.status = "FAILED"
 
-    application.status = "PAYMENT_PENDING"
+    # The checkout can report a dismissal or failure after the payment already went through (or a
+    # request can simply be replayed): a paid application and a successful payment never go backwards.
+    if _mark_attempt_failed(application, payment):
+        log.info("payment attempt failed order=%s application=%s", order_id, application.id)
     db.session.commit()
 
     return jsonify({"success": True, "data": {"status": application.status}})

@@ -316,3 +316,130 @@ def test_pdf_labels_expand_abbreviations():
 
     for label in ("Communication line 1", "Permanent pincode", "EWS", "UG degree", "ID proof type"):
         assert f"<td class='label'>{label}</td>" in html
+
+# ------------------------------------------- a success is never undone, a retry works, events are logged
+def _confirm(client, order_id="order_1", payment_id="pay_1", signature=None):
+    return client.post("/api/app/payment/confirm", json={
+        "razorpay_order_id": order_id, "razorpay_payment_id": payment_id,
+        "razorpay_signature": signature if signature is not None else _sign(order_id, payment_id)})
+
+
+def _paid_student(make_student):
+    """A student whose application is PAID through order_1."""
+    student = make_student(status="IN_PROGRESS", files=False)
+    application = _add_created_payment(student)
+    application.status = "PAID"
+    payment = Payment.query.filter_by(razorpay_order_id="order_1").one()
+    payment.status, payment.razorpay_payment_id = "SUCCESS", "pay_1"
+    db.session.commit()
+    return student
+
+
+def test_a_late_failed_report_cannot_unpay_a_paid_application(client, make_student):
+    student = _paid_student(make_student)
+    _login_as(client, student)
+
+    resp = client.post("/api/app/payment/failed", json={"order_id": "order_1", "dismissed": True})
+
+    assert resp.status_code == 200 and resp.json["data"]["status"] == "PAID"
+    assert _application_of(student).status == "PAID"
+    assert Payment.query.filter_by(razorpay_order_id="order_1").one().status == "SUCCESS"
+
+
+def test_a_bad_signature_sent_after_success_changes_nothing(client, make_student, no_delivery):
+    student = _paid_student(make_student)
+    _login_as(client, student)
+
+    # order_1 is already SUCCESS, so this is treated as a repeat and acknowledged without being re-judged
+    assert _confirm(client, signature="deadbeef").status_code == 200
+    assert _application_of(student).status == "PAID"
+    assert Payment.query.filter_by(razorpay_order_id="order_1").one().status == "SUCCESS"
+
+    # and a bad signature on a different, unpaid order cannot downgrade the paid application either
+    db.session.add(Payment(application_id=_application_of(student).id, razorpay_order_id="order_2",
+                           amount=1000, status="CREATED"))
+    db.session.commit()
+    assert _confirm(client, order_id="order_2", payment_id="pay_2", signature="deadbeef").status_code == 400
+    assert _application_of(student).status == "PAID"
+
+
+def test_repeating_a_confirmation_delivers_only_once(client, make_student, monkeypatch):
+    from app.blueprints import payment
+
+    calls = []
+    monkeypatch.setattr(payment, "_generate_and_deliver_confirmation", lambda *a, **k: calls.append(1))
+    student = make_student(status="IN_PROGRESS", files=False)
+    _add_created_payment(student)
+    _login_as(client, student)
+
+    assert _confirm(client).status_code == 200
+    assert _confirm(client).status_code == 200   # double click / retried request
+
+    assert len(calls) == 1
+    assert _application_of(student).status == "PAID"
+
+
+def test_a_second_payment_for_a_paid_application_is_recorded_not_delivered_again(client, make_student, monkeypatch):
+    from app.blueprints import payment
+
+    calls = []
+    monkeypatch.setattr(payment, "_generate_and_deliver_confirmation", lambda *a, **k: calls.append(1))
+    student = _paid_student(make_student)
+    db.session.add(Payment(application_id=_application_of(student).id, razorpay_order_id="order_2",
+                           amount=1000, status="CREATED"))
+    db.session.commit()
+    _login_as(client, student)
+
+    resp = _confirm(client, order_id="order_2", payment_id="pay_2")
+
+    assert resp.status_code == 200
+    assert Payment.query.filter_by(razorpay_order_id="order_2").one().status == "SUCCESS"   # kept, so it can be refunded
+    assert _application_of(student).status == "PAID"
+    assert calls == []
+
+
+def test_a_failed_payment_can_be_retried_and_then_succeeds(client, make_student, no_delivery, monkeypatch):
+    from app.services import payment_service
+
+    orders = iter(["order_1", "order_2"])
+    monkeypatch.setattr(payment_service, "create_order",
+                        lambda amount_paise, receipt: {"id": next(orders), "amount": amount_paise, "currency": "INR"})
+    student = make_student(status="IN_PROGRESS", files=False)
+    _login_as(client, student)
+
+    assert client.post("/api/app/payment/create-order").status_code == 201
+    client.post("/api/app/payment/failed", json={"order_id": "order_1", "dismissed": True})
+    assert _application_of(student).status == "PAYMENT_PENDING"
+
+    assert client.post("/api/app/payment/create-order").status_code == 201   # allowed again while PAYMENT_PENDING
+    assert _confirm(client, order_id="order_2", payment_id="pay_2").status_code == 200
+
+    assert _application_of(student).status == "PAID"
+    assert [p.status for p in Payment.query.order_by(Payment.razorpay_order_id).all()] == ["FAILED", "SUCCESS"]
+
+
+def test_payment_events_are_logged_without_secrets(client, make_student, no_delivery, monkeypatch, caplog):
+    import logging
+
+    from app.services import payment_service
+
+    monkeypatch.setattr(payment_service, "create_order",
+                        lambda amount_paise, receipt: {"id": "order_1", "amount": amount_paise, "currency": "INR"})
+    student = make_student(status="IN_PROGRESS", files=False)
+    _login_as(client, student)
+    signature = _sign("order_1", "pay_1")
+
+    with caplog.at_level(logging.INFO, logger="app.blueprints.payment"):
+        client.post("/api/app/payment/create-order")
+        _confirm(client, signature="deadbeef")                      # a forged one first
+        db.session.add(Payment(application_id=_application_of(student).id, razorpay_order_id="order_2",
+                               amount=1000, status="CREATED"))
+        db.session.commit()
+        _confirm(client, order_id="order_2", payment_id="pay_2", signature=_sign("order_2", "pay_2"))
+
+    text = caplog.text
+    assert "payment order created order=order_1" in text
+    assert "payment signature verification failed order=order_1" in text
+    assert "payment confirmed order=order_2 payment=pay_2" in text
+    for secret in (signature, _sign("order_2", "pay_2"), "deadbeef", SECRET):
+        assert secret not in text
