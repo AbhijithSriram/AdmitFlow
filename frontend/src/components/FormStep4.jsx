@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { isUgProgramme } from '../content/institution';
+import { COLLEGES, UNIVERSITIES, isUgProgramme } from '../content/institution';
 import { stripFor, textError } from '../utils/textRules';
 
 // Step 4: Academic details. What is asked depends on the programme chosen in Step 3:
@@ -292,10 +292,20 @@ export default function FormStep4({ initialData = {}, programme, onNext, onBack,
             </Field>
 
             <Field label="College" required error={errors.college}>
-              <input type="text" {...text('college', 'org')} />
+              <input type="text" list="college-options" {...text('college', 'org')} />
+              <datalist id="college-options">
+                {COLLEGES.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </Field>
             <Field label="University" required error={errors.university}>
-              <input type="text" {...text('university', 'org')} />
+              <input type="text" list="university-options" {...text('university', 'org')} />
+              <datalist id="university-options">
+                {UNIVERSITIES.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
             </Field>
 
             <Field label="Month of Passing" required error={errors.passing_month}>

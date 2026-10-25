@@ -20,6 +20,30 @@ export const PROGRAMMES = {
 export const UG_PROGRAMMES = ['B.Tech']
 export const isUgProgramme = (programme) => UG_PROGRAMMES.includes(programme)
 
+// Suggestions for the College and University boxes in Step 4 (SRD FR-6.5). Students can still type
+// any other name. DEMO PLACEHOLDERS: replace with the institution's own list. Keep names to letters and
+// spaces so a picked suggestion is never altered by the text filters.
+export const COLLEGES = [
+  'College of Engineering Guindy',
+  'Madras Institute of Technology',
+  'PSG College of Technology',
+  'SSN College of Engineering',
+  'Thiagarajar College of Engineering',
+  'Coimbatore Institute of Technology',
+  'Loyola College',
+  'Presidency College',
+]
+
+export const UNIVERSITIES = [
+  'Anna University',
+  'University of Madras',
+  'Bharathiar University',
+  'Bharathidasan University',
+  'Madurai Kamaraj University',
+  'Alagappa University',
+  'Pondicherry University',
+]
+
 export const KEY_DATES = [
   { label: 'Applications open', value: '1 January' },
   { label: 'Last date to apply', value: '31 March' },
