@@ -135,19 +135,48 @@ def _like_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def list_students(page: int, sort: str, order: str, q: str, stage: str, payment_status: str) -> dict:
-    """Paginated applicant list (20 per page) with search, filters and sorting.
+SORTS = ("name", "email", "registered_at", "stage")
+
+
+def parse_applicant_filters(args) -> tuple[dict | None, str | None]:
+    """Validate the applicant filters from a request's query string (shared by the applicant list
+    and the export, so both accept exactly the same parameters).
+
+    Args:
+        args: the request's query arguments (sort, order, q, stage, payment_status).
+    Returns:
+        (filters, None) where filters has the keys sort, order, q, stage, payment_status;
+        or (None, a human-readable error message) if a value is not allowed.
+    """
+    sort, order = args.get("sort", "registered_at"), args.get("order", "desc")
+    stage, payment_status = args.get("stage", ""), args.get("payment_status", "")
+    if sort not in SORTS or order not in ("asc", "desc"):
+        return None, "Invalid sort option."
+    if stage and stage not in STAGES:
+        return None, "Invalid stage filter."
+    if payment_status and payment_status not in PAYMENT_STATUSES:
+        return None, "Invalid payment status filter."
+    return {"sort": sort, "order": order, "q": args.get("q", "").strip()[:100],
+            "stage": stage, "payment_status": payment_status}, None
+
+
+def applicant_query(sort: str, order: str, q: str, stage: str, payment_status: str):
+    """The filtered, sorted applicant query behind both the admin list and the export.
 
     Students who have not started an application have no applications row, so their
     stage is reported as NOT_STARTED. Payment status is derived from the payments
     table: PAID if any attempt succeeded, PENDING if attempts exist but none succeeded,
     NONE otherwise.
+
+    Returns:
+        A SQLAlchemy select (not yet executed) with one row per student.
     """
     stage_expr = func.coalesce(Application.status, "NOT_STARTED")
     pay_expr = _payment_status_expr()
 
     query = (
         select(Student.id, Student.full_name, Student.email, Student.phone, Student.created_at,
+               Student.date_of_birth, Student.gender, Application.programme, Application.specialisation,
                stage_expr.label("stage"), pay_expr.label("payment_status"))
         .select_from(Student)
         .outerjoin(Application, Application.student_id == Student.id)
@@ -165,7 +194,12 @@ def list_students(page: int, sort: str, order: str, q: str, stage: str, payment_
     sort_columns = {"name": Student.full_name, "email": Student.email,
                     "registered_at": Student.created_at, "stage": stage_expr}
     col = sort_columns[sort]
-    query = query.order_by(col.asc() if order == "asc" else col.desc(), Student.id)
+    return query.order_by(col.asc() if order == "asc" else col.desc(), Student.id)
+
+
+def list_students(page: int, sort: str, order: str, q: str, stage: str, payment_status: str) -> dict:
+    """Paginated applicant list (20 per page) with search, filters and sorting (see applicant_query)."""
+    query = applicant_query(sort, order, q, stage, payment_status)
 
     total = db.session.execute(select(func.count()).select_from(query.order_by(None).subquery())).scalar_one()
     total_pages = max(1, math.ceil(total / PER_PAGE))

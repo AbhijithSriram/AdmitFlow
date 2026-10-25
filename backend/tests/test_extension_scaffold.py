@@ -30,6 +30,19 @@ STUDENT_ROUTES = [
     ("POST", "/api/student/tests/p1/submit"),
 ]
 
+# Admin routes whose 501 stub has been replaced by a real implementation. Their real behaviour is
+# tested in the owner's own test file (for example test_admin_stats.py); the guard tests above still
+# cover them. Add a route here in the same commit that implements it.
+IMPLEMENTED_ADMIN_ROUTES = {
+    ("GET", "/api/admin/seats"),
+    ("PUT", "/api/admin/seats"),
+    ("GET", "/api/admin/stats/summary"),
+    ("GET", "/api/admin/stats/programmes"),
+    ("GET", "/api/admin/stats/registrations"),
+    ("GET", "/api/admin/export/applicants.csv"),
+    ("GET", "/api/admin/export/applicants.pdf"),
+}
+
 
 @pytest.mark.parametrize("method, path", ADMIN_ROUTES)
 def test_admin_routes_need_an_admin_session(client, method, path):
@@ -54,7 +67,9 @@ def test_a_student_session_is_not_enough_for_admin_routes(client, make_student, 
     assert client.open(path, method=method).status_code in (401, 403)
 
 
-@pytest.mark.parametrize("method, path", ADMIN_ROUTES)
+@pytest.mark.parametrize(
+    "method, path", [r for r in ADMIN_ROUTES if r not in IMPLEMENTED_ADMIN_ROUTES]
+)
 def test_admin_stubs_answer_501_to_an_admin(logged_in, method, path):
     resp = logged_in.open(path, method=method)
     assert resp.status_code == 501
