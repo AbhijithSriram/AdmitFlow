@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { adminStatsApi } from '../../api/client'
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { errorMessage } from './adminUtils'
 import { useAdminSession } from './useAdminSession'
 
@@ -20,6 +21,10 @@ const NUMBER_COLUMNS = [
 ]
 
 const WHOLE_NUMBER = /^\d+$/
+const shortDate = (iso) => {
+  const [, month, day] = String(iso).split('-')
+  return month && day ? `${day}/${month}` : String(iso)
+}
 const seatKey = (r) => `${r.programme}||${r.specialisation}`
 
 export default function AdminStats() {
@@ -32,6 +37,13 @@ export default function AdminStats() {
   const [saving, setSaving] = useState(false)
   const [seatError, setSeatError] = useState('')
   const [seatNotice, setSeatNotice] = useState('')
+  const [rangeInput, setRangeInput] = useState({ from: '', to: '' })
+  const [range, setRange] = useState({ from: '', to: '' })
+  const [chartReload, setChartReload] = useState(0)
+  const [chart, setChart] = useState({ key: null, data: [], from: '', to: '' })
+  const [chartError, setChartError] = useState('')
+  const chartKey = `${range.from}|${range.to}|${chartReload}`
+  const chartLoading = chart.key !== chartKey
 
   // "loading" is derived: the numbers are loading until the response for the CURRENT request arrives.
   const loading = loaded.key !== reloadCount
@@ -104,6 +116,44 @@ export default function AdminStats() {
     } finally {
       setSaving(false)
     }
+  }
+
+  useEffect(() => {
+    if (status !== 'authed') return undefined
+    let cancelled = false
+    const params = {}
+    if (range.from && range.to) {
+      params.from = range.from
+      params.to = range.to
+    }
+    adminStatsApi
+      .registrations(params)
+      .then((res) => {
+        if (cancelled) return
+        const d = res.data.data
+        setChartError('')
+        setChart({ key: chartKey, data: d.registrations, from: d.from, to: d.to })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (err?.response?.status === 401) expire()
+        else {
+          setChartError(errorMessage(err))
+          setChart((c) => ({ ...c, key: chartKey }))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [status, range, chartKey, expire])
+
+  const chartTotal = chart.data.reduce((sum, d) => sum + d.count, 0)
+  const rangeOk = Boolean(rangeInput.from && rangeInput.to && rangeInput.from <= rangeInput.to)
+  const rangeBackwards = Boolean(rangeInput.from && rangeInput.to && rangeInput.from > rangeInput.to)
+  const applyRange = () => setRange({ from: rangeInput.from, to: rangeInput.to })
+  const clearRange = () => {
+    setRangeInput({ from: '', to: '' })
+    setRange({ from: '', to: '' })
   }
 
   if (status === 'loading') return <p className="p-10 text-center text-slate-600">Checking your session…</p>
@@ -196,6 +246,83 @@ export default function AdminStats() {
             )}
           </table>
         </div>
+
+        <section aria-labelledby="registrations-heading" className="mt-8 bg-white border border-slate-200 rounded-lg p-4">
+          <h2 id="registrations-heading" className="text-lg font-semibold text-slate-900 mb-1">
+            Registrations per day
+          </h2>
+          <p className="text-sm text-slate-600 mb-3">
+            {chart.from && chart.to ? `${chart.from} to ${chart.to}` : 'Last 30 days'}
+          </p>
+          <div className="flex flex-wrap items-end gap-3 mb-1">
+            <label className="text-sm text-slate-700">
+              From
+              <input
+                type="date"
+                value={rangeInput.from}
+                onChange={(e) => setRangeInput((r) => ({ ...r, from: e.target.value }))}
+                className="block mt-1 rounded-md border border-slate-300 px-2 py-1"
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              To
+              <input
+                type="date"
+                value={rangeInput.to}
+                onChange={(e) => setRangeInput((r) => ({ ...r, to: e.target.value }))}
+                className="block mt-1 rounded-md border border-slate-300 px-2 py-1"
+              />
+            </label>
+            <button
+              onClick={applyRange}
+              disabled={!rangeOk}
+              className="px-3 py-1.5 bg-blue-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Apply
+            </button>
+            <button
+              onClick={clearRange}
+              disabled={!range.from && !range.to && !rangeInput.from && !rangeInput.to}
+              className="px-3 py-1.5 border border-slate-300 rounded-md text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Last 30 days
+            </button>
+          </div>
+          <p className={`text-xs mb-3 ${rangeBackwards ? 'text-red-700 font-medium' : 'text-slate-500'}`}>
+            {rangeBackwards ? 'The start date must not be after the end date.' : 'Pick both dates, or use Last 30 days.'}
+          </p>
+          {chartError && (
+            <p role="alert" className="text-sm font-medium text-red-700 mb-3">
+              {chartError}{' '}
+              <button onClick={() => setChartReload((n) => n + 1)} className="underline">
+                Try again
+              </button>
+            </p>
+          )}
+          <div className={chartLoading ? 'opacity-60' : ''} aria-busy={chartLoading}>
+            {chartLoading && chart.data.length === 0 && <p className="text-sm text-slate-600">Loading chart…</p>}
+            {!chartLoading && !chartError && chartTotal === 0 && (
+              <p className="text-sm text-slate-600 py-6 text-center">No registrations in this period.</p>
+            )}
+            {chart.data.length > 0 && chartTotal > 0 && (
+              <div
+                role="img"
+                aria-label={`Bar chart of registrations per day, ${chart.from} to ${chart.to}, ${chartTotal} in total`}
+                className="h-64"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chart.data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="date" tickFormatter={shortDate} interval="preserveStartEnd" minTickGap={16} />
+                    <YAxis allowDecimals={false} width={32} />
+                    <Tooltip formatter={(value) => [value, 'Registrations']} />
+                    <Bar dataKey="count" fill="#2563eb" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </section>
 
         <section aria-labelledby="seat-editor-heading" className="mt-8 bg-white border border-slate-200 rounded-lg p-4">
           <h2 id="seat-editor-heading" className="text-lg font-semibold text-slate-900 mb-1">
