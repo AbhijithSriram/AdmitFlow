@@ -19,11 +19,19 @@ const NUMBER_COLUMNS = [
   { key: 'shortlisted', label: 'Shortlisted' },
 ]
 
+const WHOLE_NUMBER = /^\d+$/
+const seatKey = (r) => `${r.programme}||${r.specialisation}`
+
 export default function AdminStats() {
   const { status, admin, signOut, expire } = useAdminSession()
   const [loaded, setLoaded] = useState({ key: null, summary: null, programmes: [] })
   const [reloadCount, setReloadCount] = useState(0)
   const [error, setError] = useState('')
+  const [seatRows, setSeatRows] = useState([])
+  const [edits, setEdits] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [seatError, setSeatError] = useState('')
+  const [seatNotice, setSeatNotice] = useState('')
 
   // "loading" is derived: the numbers are loading until the response for the CURRENT request arrives.
   const loading = loaded.key !== reloadCount
@@ -50,6 +58,53 @@ export default function AdminStats() {
       cancelled = true
     }
   }, [status, reloadCount, expire])
+
+  useEffect(() => {
+    if (status !== 'authed') return undefined
+    let cancelled = false
+    adminStatsApi
+      .getSeats()
+      .then((res) => {
+        if (!cancelled) setSeatRows(res.data.data.seats)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (err?.response?.status === 401) expire()
+        else setSeatError(errorMessage(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [status, expire])
+
+  const rowsView = seatRows.map((r) => {
+    const key = seatKey(r)
+    const text = edits[key] ?? String(r.seats)
+    const valid = WHOLE_NUMBER.test(text)
+    return { ...r, key, text, valid, changed: valid && Number(text) !== r.seats }
+  })
+  const changedRows = rowsView.filter((r) => r.changed)
+  const hasInvalid = rowsView.some((r) => !r.valid)
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSeatError('')
+    setSeatNotice('')
+    try {
+      const body = changedRows.map((r) => ({ programme: r.programme, specialisation: r.specialisation, seats: Number(r.text) }))
+      const res = await adminStatsApi.setSeats(body)
+      setSeatRows(res.data.data.seats)
+      setEdits({})
+      const n = res.data.data.changed
+      setSeatNotice(n === 0 ? 'No changes to save.' : `Saved ${n} change${n === 1 ? '' : 's'}.`)
+      reload()
+    } catch (err) {
+      if (err?.response?.status === 401) expire()
+      else setSeatError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (status === 'loading') return <p className="p-10 text-center text-slate-600">Checking your session…</p>
   if (status === 'anon') return <Navigate to="/admin/auth" replace />
@@ -141,6 +196,69 @@ export default function AdminStats() {
             )}
           </table>
         </div>
+
+        <section aria-labelledby="seat-editor-heading" className="mt-8 bg-white border border-slate-200 rounded-lg p-4">
+          <h2 id="seat-editor-heading" className="text-lg font-semibold text-slate-900 mb-1">
+            Edit seat numbers
+          </h2>
+          <p className="text-sm text-slate-600 mb-3">Change a number and press Save. Only the rows you changed are sent.</p>
+          {seatError && (
+            <p role="alert" className="text-sm font-medium text-red-700 mb-3">
+              {seatError}
+            </p>
+          )}
+          {seatNotice && (
+            <p role="status" className="text-sm font-medium text-green-700 mb-3">
+              {seatNotice}
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {rowsView.map((r, i) => (
+              <div key={r.key} className="flex items-center gap-3">
+                <label htmlFor={`seats-${i}`} className="flex-1 text-sm text-slate-800">
+                  {r.programme} – {r.specialisation}
+                </label>
+                <input
+                  id={`seats-${i}`}
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  value={r.text}
+                  aria-invalid={!r.valid}
+                  onChange={(e) => {
+                    setSeatNotice('')
+                    setEdits((prev) => ({ ...prev, [r.key]: e.target.value }))
+                  }}
+                  className={`w-24 rounded-md border px-2 py-1 text-right tabular-nums ${r.valid ? 'border-slate-300' : 'border-red-500'}`}
+                />
+              </div>
+            ))}
+          </div>
+          {hasInvalid && (
+            <p role="alert" className="text-sm font-medium text-red-700 mt-3">
+              Seat numbers must be whole numbers, 0 or more.
+            </p>
+          )}
+          {seatRows.length > 0 && (
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleSave}
+                disabled={saving || hasInvalid || changedRows.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving…' : 'Save seat numbers'}
+              </button>
+              <button
+                onClick={() => setEdits({})}
+                disabled={saving || Object.keys(edits).length === 0}
+                className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Reset
+              </button>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   )
