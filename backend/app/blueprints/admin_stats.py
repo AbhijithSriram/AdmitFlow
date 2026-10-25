@@ -38,7 +38,7 @@ def stats_summary():
 @admin_required
 def stats_programmes():
     """Per programme and specialisation: seats, applied, paid, shortlisted."""
-    return _not_implemented()
+    return _ok({"programmes": stats_service.get_programmes()})
 
 
 @admin_stats_bp.route("/stats/registrations", methods=["GET"])

@@ -169,3 +169,92 @@ def test_summary_counts_each_stage(logged_in, make_student):
         "paid": 2,
         "payment_pending": 1,
     }
+
+
+# ---------------------------------------------------------------------- programmes
+PROGRAMMES_URL = "/api/admin/stats/programmes"
+
+
+def _set_programme(student, programme, specialisation):
+    db.session.execute(
+        text("UPDATE applications SET programme = :p, specialisation = :s WHERE student_id = :sid"),
+        {"p": programme, "s": specialisation, "sid": student.id})
+    db.session.commit()
+
+
+def _add_paper(pass_marks=10):
+    return db.session.execute(text(
+        "INSERT INTO test_papers (title, duration_minutes, total_marks, pass_marks) "
+        "VALUES ('Aptitude', 60, 20, :pm) RETURNING id"), {"pm": pass_marks}).scalar()
+
+
+def _add_submission(student, paper_id, score):
+    app_id = db.session.execute(
+        text("SELECT id FROM applications WHERE student_id = :sid"), {"sid": student.id}).scalar()
+    db.session.execute(text(
+        "INSERT INTO test_submissions (application_id, test_paper_id, score, submitted_at) "
+        "VALUES (:a, :p, :sc, CASE WHEN :sc IS NULL THEN NULL ELSE now() END)"),
+        {"a": app_id, "p": paper_id, "sc": score})
+    db.session.commit()
+
+
+def _by_name(logged_in):
+    r = logged_in.get(PROGRAMMES_URL)
+    assert r.status_code == 200
+    return {(x["programme"], x["specialisation"]): x for x in r.json["data"]["programmes"]}
+
+
+def test_programmes_is_empty_with_no_seats_and_no_applications(logged_in, seat_table):
+    r = logged_in.get(PROGRAMMES_URL)
+    assert r.status_code == 200 and r.json["data"]["programmes"] == []
+
+
+def test_a_programme_with_no_applications_still_shows_its_seats(logged_in, seats):
+    table = _by_name(logged_in)
+    assert len(table) == 3
+    assert table[("MCA", "General")] == {
+        "programme": "MCA", "specialisation": "General", "seats": 40, "applied": 0, "paid": 0, "shortlisted": 0}
+
+
+def test_applied_and_paid_counts_per_programme(logged_in, seats, make_student):
+    make_student(status="IN_PROGRESS")                          # B.Tech / CSE (the fixture default)
+    make_student(status="PAID", payment="SUCCESS")
+    make_student(status="PAID", payment="SUCCESS")
+    make_student(status="NOT_STARTED")                          # not started: not counted as applied
+    mca = make_student(status="PAYMENT_PENDING", payment="FAILED")
+    _set_programme(mca, "MCA", "General")
+
+    table = _by_name(logged_in)
+    assert (table[("B.Tech", "CSE")]["seats"], table[("B.Tech", "CSE")]["applied"],
+            table[("B.Tech", "CSE")]["paid"]) == (100, 3, 2)
+    assert (table[("MCA", "General")]["applied"], table[("MCA", "General")]["paid"]) == (1, 0)
+    assert table[("B.Tech", "IT")]["applied"] == 0
+
+
+def test_shortlisted_needs_paid_and_a_passing_score(logged_in, seats, make_student):
+    paper = _add_paper(pass_marks=10)
+    passed = make_student(status="PAID", payment="SUCCESS")
+    failed = make_student(status="PAID", payment="SUCCESS")
+    unscored = make_student(status="PAID", payment="SUCCESS")
+    unpaid = make_student(status="PAYMENT_PENDING", payment="FAILED")
+    _add_submission(passed, paper, 12)
+    _add_submission(failed, paper, 8)
+    _add_submission(unscored, paper, None)     # assigned but not taken yet
+    _add_submission(unpaid, paper, 15)         # a good score does not help an unpaid application
+
+    row = _by_name(logged_in)[("B.Tech", "CSE")]
+    assert (row["applied"], row["paid"], row["shortlisted"]) == (4, 3, 1)
+
+
+def test_a_student_with_two_passing_tests_is_shortlisted_once(logged_in, seats, make_student):
+    student = make_student(status="PAID", payment="SUCCESS")
+    _add_submission(student, _add_paper(pass_marks=5), 9)
+    _add_submission(student, _add_paper(pass_marks=8), 9)
+    assert _by_name(logged_in)[("B.Tech", "CSE")]["shortlisted"] == 1
+
+
+def test_a_programme_missing_from_the_seat_matrix_still_shows_with_zero_seats(logged_in, seats, make_student):
+    student = make_student(status="IN_PROGRESS")
+    _set_programme(student, "M.Sc.", "Physics")
+    row = _by_name(logged_in)[("M.Sc.", "Physics")]
+    assert (row["seats"], row["applied"]) == (0, 1)

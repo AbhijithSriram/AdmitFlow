@@ -101,3 +101,42 @@ def get_summary() -> dict:
         "paid": int(row.paid),
         "payment_pending": int(row.payment_pending),
     }
+
+
+# -------------------------------------------------------------------- programmes
+def get_programmes() -> list[dict]:
+    """Per programme and specialisation: seats, applied, paid, shortlisted.
+
+    Starts from the seat matrix (so empty programmes still show) and full-joins the application
+    counts (so an application whose programme is not in the matrix still shows, with 0 seats).
+    shortlisted = a PAID application with a scored test submission at or above the paper's pass marks.
+    """
+    rows = db.session.execute(text(
+        "WITH per_app AS ("
+        "  SELECT a.programme, a.specialisation, a.status,"
+        "         EXISTS (SELECT 1 FROM test_submissions ts"
+        "                 JOIN test_papers tp ON tp.id = ts.test_paper_id"
+        "                 WHERE ts.application_id = a.id"
+        "                   AND ts.score IS NOT NULL AND ts.score >= tp.pass_marks) AS qualified"
+        "  FROM applications a"
+        "  WHERE a.programme IS NOT NULL AND a.specialisation IS NOT NULL"
+        "    AND a.status <> 'NOT_STARTED'"
+        "), agg AS ("
+        "  SELECT programme, specialisation,"
+        "         count(*) AS applied,"
+        "         count(*) FILTER (WHERE status = 'PAID') AS paid,"
+        "         count(*) FILTER (WHERE status = 'PAID' AND qualified) AS shortlisted"
+        "  FROM per_app GROUP BY programme, specialisation"
+        ") "
+        "SELECT COALESCE(s.programme, g.programme) AS programme,"
+        "       COALESCE(s.specialisation, g.specialisation) AS specialisation,"
+        "       COALESCE(s.seats, 0) AS seats,"
+        "       COALESCE(g.applied, 0) AS applied,"
+        "       COALESCE(g.paid, 0) AS paid,"
+        "       COALESCE(g.shortlisted, 0) AS shortlisted "
+        "FROM programme_seats s FULL OUTER JOIN agg g"
+        "  ON g.programme = s.programme AND g.specialisation = s.specialisation "
+        "ORDER BY 1, 2"
+    )).all()
+    return [{"programme": r.programme, "specialisation": r.specialisation, "seats": int(r.seats),
+             "applied": int(r.applied), "paid": int(r.paid), "shortlisted": int(r.shortlisted)} for r in rows]
