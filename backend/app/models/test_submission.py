@@ -1,10 +1,7 @@
 import uuid
 from datetime import datetime
-
 from sqlalchemy.dialects.postgresql import JSONB
-
 from app.extensions import db
-
 
 class TestSubmission(db.Model):
     __tablename__ = "test_submissions"
@@ -14,4 +11,6 @@ class TestSubmission(db.Model):
     test_paper_id = db.Column(db.String(36), db.ForeignKey("test_papers.id"), nullable=False)
     answers = db.Column(JSONB, nullable=False, default=dict)  # {question_id: selected_option}
     score = db.Column(db.Numeric(6, 2), nullable=True)
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    started_at = db.Column(db.DateTime, nullable=True)
     submitted_at = db.Column(db.DateTime, nullable=True)

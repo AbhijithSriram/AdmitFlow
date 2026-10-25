@@ -1,8 +1,6 @@
 import uuid
 from datetime import datetime
-
 from app.extensions import db
-
 
 class TestPaper(db.Model):
     __tablename__ = "test_papers"
@@ -12,6 +10,7 @@ class TestPaper(db.Model):
     duration_minutes = db.Column(db.Integer, nullable=False)
     total_marks = db.Column(db.Integer, nullable=False)
     pass_marks = db.Column(db.Integer, nullable=False)
+    is_published = db.Column(db.Boolean, nullable=False, default=False)
     created_by = db.Column(db.String(36), db.ForeignKey("admins.id"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 

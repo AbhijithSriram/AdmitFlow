@@ -1,7 +1,5 @@
 import uuid
-
 from app.extensions import db
-
 
 class TestQuestion(db.Model):
     __tablename__ = "test_questions"
@@ -14,3 +12,4 @@ class TestQuestion(db.Model):
     option_c = db.Column(db.String(500), nullable=False)
     option_d = db.Column(db.String(500), nullable=False)
     correct_option = db.Column(db.String(1), nullable=False)  # 'A' | 'B' | 'C' | 'D'
+    marks = db.Column(db.Integer, nullable=False, default=1)
