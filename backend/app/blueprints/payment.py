@@ -1,5 +1,4 @@
 import logging
-import os
 from datetime import datetime
 from decimal import Decimal
 
@@ -8,14 +7,13 @@ from flask import Blueprint, abort, current_app, jsonify, make_response, request
 from app.extensions import db
 from app.middleware.auth_guard import login_required
 from app.models import Application, FormDraft, Payment, Student
-from app.services import email_service, minio_service, payment_service, pdf_service
+from app.services import content_service, email_service, minio_service, payment_service, pdf_service
 
 log = logging.getLogger(__name__)
 payment_bp = Blueprint("payment", __name__)
 
-# Application fee in paise (Razorpay's smallest currency unit for INR). Overridable via
-# .env so the team can change it without touching code; defaults to Rs. 1000.
-APPLICATION_FEE_PAISE = int(os.environ.get("APPLICATION_FEE_PAISE", 100000))
+# The application fee is site content an admin edits (content_service, section "fee"), in rupees;
+# Razorpay wants paise (its smallest unit for INR).
 
 
 def _current_student_and_application():
@@ -92,9 +90,10 @@ def create_payment_order():
     # Razorpay is an external service — a bad key, network blip, or Razorpay-side outage
     # must not crash the request with a raw 500. It's logged and reported cleanly instead,
     # consistent with every other endpoint's {success, error} envelope (SRD NFR-4).
+    fee_paise = content_service.fee_paise()
     try:
         order = payment_service.create_order(
-            amount_paise=APPLICATION_FEE_PAISE,
+            amount_paise=fee_paise,
             receipt=f"admitflow-{application.id}",
         )
     except Exception:
@@ -104,13 +103,13 @@ def create_payment_order():
     payment = Payment(
         application_id=application.id,
         razorpay_order_id=order["id"],
-        amount=Decimal(APPLICATION_FEE_PAISE) / 100,
+        amount=Decimal(fee_paise) / 100,
         status="CREATED",
     )
     db.session.add(payment)
     db.session.commit()
     log.info("payment order created order=%s application=%s amount_paise=%s",
-             order["id"], application.id, APPLICATION_FEE_PAISE)
+             order["id"], application.id, fee_paise)
 
     return (
         jsonify(
@@ -255,7 +254,8 @@ def _generate_and_deliver_confirmation(student: Student, application: Applicatio
 
         pdf_bytes = pdf_service.render_application_pdf(
             {
-                "institution_name": "AdmitFlow Institute",
+                "institution_name": content_service.institution_name(),
+                "demo_footer": content_service.demo_footer(),
                 "full_name": student.full_name,
                 "programme": application.programme,
                 "specialisation": application.specialisation,
@@ -273,7 +273,8 @@ def _generate_and_deliver_confirmation(student: Student, application: Applicatio
 
         receipt_bytes = pdf_service.render_receipt_pdf(
             {
-                "institution_name": "AdmitFlow Institute",
+                "institution_name": content_service.institution_name(),
+                "demo_footer": content_service.demo_footer(),
                 "full_name": student.full_name,
                 "programme": application.programme,
                 "amount": payment.amount,

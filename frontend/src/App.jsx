@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import DemoNotice from './components/DemoNotice'
 import RequireAuth from './components/RequireAuth'
+import AdminContent from './pages/Admin/AdminContent'
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminLogin from './pages/Admin/AdminLogin'
 import AdminStats from './pages/Admin/AdminStats'
@@ -68,6 +69,7 @@ export default function App() {
       <Route path="/admin/tests/new" element={<TestEditor />} />
       <Route path="/admin/tests/:paperId" element={<TestEditor />} />
       <Route path="/admin/stats" element={<AdminStats />} />
+      <Route path="/admin/content" element={<AdminContent />} />
       {/* Anything else: a "Page not found" page instead of a blank screen. Keep this last. */}
       <Route path="*" element={<NotFound />} />
     </Routes>

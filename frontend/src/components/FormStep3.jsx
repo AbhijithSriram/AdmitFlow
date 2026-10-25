@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { PROGRAMMES } from '../content/institution';
+import { useContent } from '../context/ContentContext';
 
 const inputCls = 'mt-1 block w-full rounded-md border border-gray-300 shadow-sm p-2';
 
@@ -37,7 +37,8 @@ export default function FormStep4({ initialData = {}, onNext, onBack, onAutoSave
     if (onAutoSave) onAutoSave(buildPayload(next));
   };
 
-  const options = PROGRAMMES[f.programme] || [];
+  const { programmeNames, specialisationsOf } = useContent();
+  const options = specialisationsOf(f.programme);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -69,7 +70,7 @@ export default function FormStep4({ initialData = {}, onNext, onBack, onAutoSave
             className={inputCls}
           >
             <option value="">Select Programme</option>
-            {Object.keys(PROGRAMMES).map((p) => (
+            {programmeNames.map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
           </select>

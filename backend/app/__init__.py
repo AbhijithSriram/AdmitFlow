@@ -41,6 +41,7 @@ def register_blueprints(app: Flask) -> None:
     from app.blueprints.admin_tests import admin_tests_bp
     from app.blueprints.application import application_bp
     from app.blueprints.auth import auth_bp
+    from app.blueprints.content import admin_content_bp, content_bp
     from app.blueprints.payment import payment_bp
     from app.blueprints.student_tests import student_tests_bp
 
@@ -54,6 +55,9 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(admin_stats_bp, url_prefix="/api/admin")
     app.register_blueprint(admin_export_bp, url_prefix="/api/admin/export")
     app.register_blueprint(student_tests_bp, url_prefix="/api/student/tests")
+    # Editable site content (v1.1 FR-12): public read at /api/content, editing under /api/admin.
+    app.register_blueprint(content_bp, url_prefix="/api")
+    app.register_blueprint(admin_content_bp, url_prefix="/api/admin")
 
 
 def register_security_headers(app: Flask) -> None:

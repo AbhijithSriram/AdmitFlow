@@ -10,7 +10,7 @@ import FormStepNav from '../components/FormStepNav';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient, applicationApi } from '../api/client';
 import AppHeader from '../components/AppHeader';
-import { GUIDELINES, isUgProgramme } from '../content/institution';
+import { useContent } from '../context/ContentContext';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useFormRehydrate } from '../hooks/useFormRehydrate';
 
@@ -20,13 +20,14 @@ function isPlainObject(v) {
 
 function Guidelines({ onAgree, busy, error }) {
   const [understood, setUnderstood] = useState(false);
+  const { content, fill } = useContent();
 
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-gray-800">Application Guidelines</h2>
       <ol className="border rounded-md p-4 bg-gray-50 space-y-3 text-sm text-gray-700 list-decimal list-inside">
-        {GUIDELINES.map((line, i) => (
-          <li key={i}>{line}</li>
+        {content.guidelines.map((line, i) => (
+          <li key={i}>{fill(line)}</li>
         ))}
       </ol>
       <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
@@ -55,6 +56,7 @@ function Guidelines({ onAgree, busy, error }) {
 
 function ApplicationFormBody() {
   const navigate = useNavigate();
+  const { isUgProgramme } = useContent();
   const [phase, setPhase] = useState('loading'); // loading | guidelines | form | error
   const [loadError, setLoadError] = useState('');
   const [applicationId, setApplicationId] = useState(null);

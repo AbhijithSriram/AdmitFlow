@@ -1,0 +1,140 @@
+{
+  "institution": {
+    "name": "AdmitFlow Institute",
+    "about": [
+      "AdmitFlow is a student project built for a Full Stack Web Development course. It shows how a college admissions portal works end to end: registration with email verification, a multi-step application form that saves as you type, document uploads, online fee payment, a timed online aptitude test, and a staff portal with statistics and exports.",
+      "\"AdmitFlow Institute\" is a fictional college. The programmes, dates, fees and rules on this site are realistic examples, not an offer of admission. Applying here does not lead to admission anywhere.",
+      "Payments use the payment gateway’s test mode: no real money is charged, and receipts are not proof of any real payment. Please do not enter real card details.",
+      "If you came here looking for a real college’s admissions, please contact that college directly."
+    ]
+  },
+  "contact": {
+    "email": "admitflow.noreply@gmail.com",
+    "phone": null,
+    "address": null,
+    "hours": null,
+    "note": "AdmitFlow is an academic project, so there is no admissions office or phone line. For questions about the project itself, write to the project team at the address above."
+  },
+  "dates": {
+    "items": [
+      {
+        "label": "Applications open",
+        "value": "1 December 2026"
+      },
+      {
+        "label": "Last date to apply",
+        "value": "31 March 2027, 11:59 pm IST"
+      },
+      {
+        "label": "Online aptitude test (on this portal)",
+        "value": "12 to 16 April 2027"
+      },
+      {
+        "label": "First shortlist",
+        "value": "30 April 2027"
+      },
+      {
+        "label": "Results announced",
+        "value": "15 May 2027"
+      }
+    ],
+    "note": "Illustrative dates for this academic demo."
+  },
+  "guidelines": [
+    "AdmitFlow is an academic project: applying here does not lead to admission anywhere, and payments run in test mode, so no real money is charged.",
+    "Read the eligibility rules for your programme (Eligibility & Fee Structure) before you begin.",
+    "Keep ready a recent passport-size photograph and your signature (JPEG or PNG), and an ID proof (Aadhaar, PAN or Voter ID) as a PDF.",
+    "Fill in every detail exactly as it appears on your official documents. Original documents are verified at the time of admission.",
+    "Your progress is saved automatically: you can log out and continue later from where you left off.",
+    "The application is complete only when every step is filled in, the documents are uploaded and the fee is paid. Once the fee is paid, the application can no longer be edited.",
+    "The application fee of {fee} is non-refundable under any circumstances.",
+    "Submitting an application does not guarantee admission. Admission is on merit and subject to the eligibility rules.",
+    "Paid applicants may be assigned a timed online aptitude test on this portal. It can be taken once, and the timer keeps running even if you close the page.",
+    "If any information is found to be incorrect, the application or admission will be cancelled, even after the fee is paid.",
+    "Keep your login details and the payment receipt for future reference.",
+    "By clicking \"I Agree & Proceed\" you confirm that you have read and accepted these guidelines."
+  ],
+  "eligibility": [
+    "B.Tech: a pass in Class XII (or equivalent) with Physics, Chemistry and Mathematics, and at least 60% aggregate in those three subjects (55% for SC/ST applicants). Students appearing for Class XII this year may apply.",
+    "M.Tech: a B.E. or B.Tech in a related discipline with at least 60% marks, or a CGPA of 6.5 out of 10.",
+    "MCA: a bachelor’s degree of at least three years with Mathematics at Class XII or degree level, with at least 50% marks.",
+    "M.Sc.: a B.Sc. in the relevant subject with at least 55% marks.",
+    "Final-year students may apply, and must produce their results before admission.",
+    "Shortlisting is on merit: qualifying marks and the online aptitude test. Applicants at or above the test’s pass mark are shortlisted first; others may be considered later, subject to seats.",
+    "Applicants from outside India (NRI / OCI) must provide passport details.",
+    "Reservation categories (General, OBC, BC, SC, ST) and EWS status are applied as per government norms."
+  ],
+  "documents": [
+    "Class X and Class XII mark sheets",
+    "Degree certificate and semester mark sheets (M.Tech, MCA and M.Sc.)",
+    "Community certificate, if claiming a reservation category",
+    "The ID proof uploaded with the application",
+    "Transfer certificate from the last institution attended"
+  ],
+  "fee": {
+    "amount_inr": 1000
+  },
+  "suggestions": {
+    "colleges": [
+      "College of Engineering Guindy",
+      "Madras Institute of Technology",
+      "PSG College of Technology",
+      "Thiagarajar College of Engineering",
+      "Coimbatore Institute of Technology",
+      "Kumaraguru College of Technology",
+      "Loyola College",
+      "Presidency College",
+      "Madras Christian College"
+    ],
+    "universities": [
+      "Anna University",
+      "University of Madras",
+      "Bharathiar University",
+      "Bharathidasan University",
+      "Madurai Kamaraj University",
+      "Alagappa University",
+      "Pondicherry University"
+    ]
+  },
+  "programmes": [
+    {
+      "name": "B.Tech",
+      "level": "UG",
+      "specialisations": [
+        "CSE",
+        "IT",
+        "ECE",
+        "EEE",
+        "Mechanical",
+        "Civil"
+      ]
+    },
+    {
+      "name": "M.Tech",
+      "level": "PG",
+      "specialisations": [
+        "Computer Science",
+        "VLSI Design",
+        "Data Science",
+        "Structural Engineering"
+      ]
+    },
+    {
+      "name": "MCA",
+      "level": "PG",
+      "specialisations": [
+        "General"
+      ]
+    },
+    {
+      "name": "M.Sc.",
+      "level": "PG",
+      "specialisations": [
+        "Computer Science",
+        "Mathematics",
+        "Physics",
+        "Data Science"
+      ]
+    }
+  ]
+}

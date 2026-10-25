@@ -9,7 +9,7 @@ import io
 from datetime import datetime
 
 from app.extensions import db
-from app.services import admin_service, pdf_service
+from app.services import admin_service, content_service, pdf_service
 
 # A sanity cap, far above any one college's applicant count: an export is generated in one request.
 MAX_ROWS = 10_000
@@ -82,10 +82,12 @@ def to_csv(rows: list[list[str]]) -> bytes:
     return buf.getvalue().encode("utf-8-sig")
 
 
-def to_pdf(rows: list[list[str]], filters: dict, institution_name: str = "AdmitFlow Institute") -> bytes:
-    """A landscape PDF table of the same rows (values are escaped by pdf_service)."""
+def to_pdf(rows: list[list[str]], filters: dict) -> bytes:
+    """A landscape PDF table of the same rows (values are escaped by pdf_service), headed with the
+    institution name from the site content."""
     return pdf_service.render_applicants_pdf({
-        "institution_name": institution_name,
+        "institution_name": content_service.institution_name(),
+        "demo_footer": content_service.demo_footer(),
         "generated_at": datetime.utcnow().strftime("%d %b %Y, %H:%M UTC"),
         "filters": describe_filters(filters),
         "headers": HEADERS,

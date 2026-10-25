@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { applicationApi, studentApi } from '../api/client'
+import { BROCHURE_URL, applicationApi, studentApi } from '../api/client'
 import AppHeader from '../components/AppHeader'
 import StatusBadge from '../components/StatusBadge'
 import TestsCard from '../components/TestsCard'
@@ -99,7 +99,7 @@ export default function Dashboard() {
               View Receipt
             </button>
           )}
-          <a href="/brochure.pdf" target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded border">
+          <a href={BROCHURE_URL} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded border">
             Download Brochure
           </a>
         </div>

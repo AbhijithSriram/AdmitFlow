@@ -4,25 +4,32 @@ from email.message import EmailMessage
 
 from flask import current_app
 
+from app.services import content_service
 
-# Added to every email: they reach people outside the website, so they must say what AdmitFlow is.
-DEMO_FOOTER_HTML = (
-    '<hr style="border:none;border-top:1px solid #ddd;margin-top:24px">'
-    '<p style="font-size:12px;color:#666">AdmitFlow is an academic project, and AdmitFlow Institute is fictional. '
-    "This is not an email from any real college, and no admission is offered. "
-    "Payments run in test mode; no real money is charged.</p>"
-)
+
+def demo_footer_html() -> str:
+    """Added to every email while DEMO_MODE is on: emails reach people outside the website, so they
+    must say what AdmitFlow is. Empty on a real deployment."""
+    if not content_service.demo_mode():
+        return ""
+    name = html.escape(content_service.institution_name())
+    return (
+        '<hr style="border:none;border-top:1px solid #ddd;margin-top:24px">'
+        f'<p style="font-size:12px;color:#666">AdmitFlow is an academic project, and {name} is fictional. '
+        "This is not an email from any real college, and no admission is offered. "
+        "Payments run in test mode; no real money is charged.</p>"
+    )
 
 
 def _send(to_address: str, subject: str, html_body: str, attachments: list[tuple[str, bytes, str]] | None = None) -> None:
     """Send an HTML email via smtplib, optionally with attachments as (filename, content, mime_subtype).
-    Every email gets the academic-project footer (DEMO_FOOTER_HTML)."""
+    Every email gets the academic-project footer while DEMO_MODE is on (demo_footer_html)."""
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = current_app.config["SMTP_USERNAME"]
     message["To"] = to_address
     message.set_content("This email requires an HTML-capable client.")
-    message.add_alternative(html_body + DEMO_FOOTER_HTML, subtype="html")
+    message.add_alternative(html_body + demo_footer_html(), subtype="html")
 
     for filename, content, mime_subtype in attachments or []:
         message.add_attachment(content, maintype="application", subtype=mime_subtype, filename=filename)

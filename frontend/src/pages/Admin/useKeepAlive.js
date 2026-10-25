@@ -27,7 +27,14 @@ export function useKeepAlive({ enabled = true, onExpired } = {}) {
       try {
         await adminApi.me()
       } catch (err) {
-        if (err?.response?.status === 401) onExpiredRef.current?.()
+        if (err?.response?.status !== 401) return
+        // A ping sent just before signing in again can come back 401 after it; ask once more before
+        // reporting the session as ended, or the sign-in dialog would reopen straight after sign-in.
+        try {
+          await adminApi.me()
+        } catch (again) {
+          if (again?.response?.status === 401) onExpiredRef.current?.()
+        }
       }
     }, PING_EVERY_MS)
     return () => {

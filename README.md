@@ -97,6 +97,19 @@ Hard delete order: delete the applicant's MinIO files (abort with nothing delete
 entry in its own committed transaction -> one `DELETE FROM students` that cascades. `audit_log` is append-only
 (a database trigger rejects UPDATE/DELETE).
 
+### Site content (one deployment per institution)
+
+Everything the site says about the institution (name, About text, contact details, dates, guidelines,
+eligibility, documents, fee, college suggestions, programmes and specialisations) is edited by an admin under
+**Site content** (`/admin/content`) and stored in `site_settings` (migration 007). A section that was never edited
+uses `backend/app/content_defaults.json`. The public site reads it from `GET /api/content` (cached for a minute),
+and the brochure is generated from it at `GET /api/content/brochure`. A programme or specialisation that
+applications use cannot be removed or renamed. Admin endpoints: `GET /api/admin/content`,
+`PUT /api/admin/content/<section>` (body `{"value": ...}`), `DELETE /api/admin/content/<section>` (back to default).
+
+`ADMITFLOW_DEMO_MODE` (default `1`) shows the academic-project notice on every page, PDF and email. Set it to `0`
+only for a real institution's deployment; it is deliberately not editable from the admin portal.
+
 ### Admin tests
 
 Tests run against real PostgreSQL, rebuilt from `migrations/` each run (never point this at real data):

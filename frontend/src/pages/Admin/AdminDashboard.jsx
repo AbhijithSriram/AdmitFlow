@@ -86,6 +86,7 @@ export default function AdminDashboard() {
           <Link to="/admin/dashboard" className="underline">Applicants</Link>
           <Link to="/admin/stats" className="hover:underline">Statistics</Link>
           <Link to="/admin/tests" className="hover:underline">Tests</Link>
+          <Link to="/admin/content" className="hover:underline">Site content</Link>
         </nav>
         <span className="ml-auto text-slate-300 text-sm">{admin?.name}</span>
         <button onClick={signOut} className="text-sm border border-slate-500 rounded-md px-3 py-1 hover:bg-slate-700">

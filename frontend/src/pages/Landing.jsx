@@ -1,18 +1,17 @@
 import { Link } from 'react-router-dom'
-import { DATES_NOTE, INSTITUTION_NAME, KEY_DATES, PROGRAMMES as PROGRAMME_SPECIALISATIONS } from '../content/institution'
-
-// Same list the application form offers in Step 4, so the two can never disagree.
-const PROGRAMMES = Object.entries(PROGRAMME_SPECIALISATIONS).map(([name, specialisations]) => ({
-  name,
-  detail: specialisations.join(', '),
-}))
+import { BROCHURE_URL } from '../api/client'
+import { useContent } from '../context/ContentContext'
 
 // FR-1: landing page — institution info, programmes, key dates, login/register CTAs.
+// Everything shown comes from the admin-editable site content, the same source as the form's Step 3.
 export default function Landing() {
+  const { content } = useContent()
+  const { institution, programmes, dates } = content
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-        <span className="text-xl font-semibold">{INSTITUTION_NAME}</span>
+        <span className="text-xl font-semibold">{institution.name}</span>
         <nav className="flex gap-3">
           <Link to="/login" className="px-4 py-2 rounded bg-black text-white">
             Login
@@ -39,7 +38,7 @@ export default function Landing() {
             </Link>
           </div>
           <p className="text-sm">
-            <a href="/brochure.pdf" target="_blank" rel="noopener noreferrer" className="underline">
+            <a href={BROCHURE_URL} target="_blank" rel="noopener noreferrer" className="underline">
               Download the information brochure (PDF)
             </a>
           </p>
@@ -50,10 +49,10 @@ export default function Landing() {
             Programmes
           </h2>
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PROGRAMMES.map((programme) => (
+            {programmes.map((programme) => (
               <li key={programme.name} className="border border-gray-200 rounded p-4">
                 <h3 className="font-semibold">{programme.name}</h3>
-                <p className="text-sm text-gray-600">{programme.detail}</p>
+                <p className="text-sm text-gray-600">{programme.specialisations.join(', ')}</p>
               </li>
             ))}
           </ul>
@@ -64,25 +63,29 @@ export default function Landing() {
             Key dates
           </h2>
           <dl className="grid gap-4 sm:grid-cols-2">
-            {KEY_DATES.map((item) => (
-              <div key={item.label} className="flex justify-between border-b border-gray-200 py-2">
+            {dates.items.map((item) => (
+              <div key={item.label} className="flex justify-between gap-4 border-b border-gray-200 py-2">
                 <dt className="text-gray-600">{item.label}</dt>
-                <dd className="font-medium">{item.value}</dd>
+                <dd className="font-medium text-right">{item.value}</dd>
               </div>
             ))}
           </dl>
-          {DATES_NOTE && <p className="text-sm text-gray-500">{DATES_NOTE}</p>}
+          {dates.note && <p className="text-sm text-gray-500">{dates.note}</p>}
         </section>
       </main>
 
       <footer className="px-6 py-4 border-t border-gray-200 text-center text-sm text-gray-500">
-        AdmitFlow is an academic project; {INSTITUTION_NAME} is fictional and no admissions are offered.{' '}
+        {content.demo_mode ? (
+          <>AdmitFlow is an academic project; {institution.name} is fictional and no admissions are offered. </>
+        ) : (
+          <>&copy; {institution.name}. </>
+        )}
         <Link to="/info/about" className="underline">
-          About this project
+          About
         </Link>{' '}
         &middot;{' '}
         <Link to="/info/contact" className="underline">
-          Contact the project team
+          Contact
         </Link>
       </footer>
     </div>

@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.extensions import db
 from app.models import Application, FormDraft, Student
-from app.services import field_rules, minio_service
+from app.services import content_service, field_rules, minio_service
 from app.middleware.auth_guard import login_required
 
 application_bp = Blueprint("application", __name__)
@@ -182,6 +182,15 @@ def save_draft_step(application_id, step_number):
                 return make_envelope(
                     success=False, error=f"{key.capitalize()} must be text of at most 255 characters.", code=400
                 )
+        # Only what the institution offers (admin-editable site content). Empty values still save, so
+        # auto-saving a half-filled step works.
+        choices = content_service.programme_choices()
+        programme, specialisation = payload.get("programme") or "", payload.get("specialisation") or ""
+        if programme and programme not in choices:
+            return make_envelope(success=False, error="Choose one of the programmes offered.", code=400)
+        if specialisation and (not programme or specialisation not in choices[programme]["specialisations"]):
+            return make_envelope(success=False, error=f"Choose a specialisation offered under {programme or 'the programme'}.",
+                                 code=400)
 
     try:
         # Step 3: Sync programme & specialisation directly to application record

@@ -166,9 +166,12 @@ export default function AdminStats() {
     <div className="min-h-screen bg-slate-100">
       <header className="flex items-center gap-4 bg-slate-900 text-white px-6 py-3">
         <strong>AdmitFlow staff</strong>
-        <Link to="/admin/dashboard" className="text-sm text-slate-300 underline hover:text-white">
-          Applicants
-        </Link>
+        <nav aria-label="Admin sections" className="flex gap-4 text-sm ml-4">
+          <Link to="/admin/dashboard" className="hover:underline">Applicants</Link>
+          <Link to="/admin/stats" className="underline">Statistics</Link>
+          <Link to="/admin/tests" className="hover:underline">Tests</Link>
+          <Link to="/admin/content" className="hover:underline">Site content</Link>
+        </nav>
         <span className="ml-auto text-slate-300 text-sm">{admin?.name}</span>
         <button onClick={signOut} className="text-sm border border-slate-500 rounded-md px-3 py-1 hover:bg-slate-700">
           Sign out

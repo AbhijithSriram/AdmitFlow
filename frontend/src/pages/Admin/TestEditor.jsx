@@ -23,6 +23,7 @@ function Page({ title, children }) {
           <Link to="/admin/dashboard" className="hover:underline">Applicants</Link>
           <Link to="/admin/stats" className="hover:underline">Statistics</Link>
           <Link to="/admin/tests" className="underline">Tests</Link>
+          <Link to="/admin/content" className="hover:underline">Site content</Link>
         </nav>
       </header>
       <main className="max-w-4xl mx-auto p-6">
@@ -66,7 +67,9 @@ function EditorForm({ initial, paperId, adminEmail }) {
   const [form, setForm] = useState(initial)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [reauth, setReauth] = useState(false) // the session expired: sign in over the page, keep the work
+  // The session expired: sign in over the page, keep the work. 'save' = a save was refused and runs
+  // again after sign-in; 'expired' = the keep-alive noticed while nothing was being saved.
+  const [reauth, setReauth] = useState(false)
   const retryAfterSignIn = useRef(false)
   const initialJson = useRef(JSON.stringify(initial))
   const dirty = JSON.stringify(form) !== initialJson.current
@@ -103,7 +106,7 @@ function EditorForm({ initial, paperId, adminEmail }) {
   }, [dirty])
 
   // Typing makes no requests, so keep the session alive while someone is actively editing.
-  useKeepAlive({ onExpired: () => setReauth(true) })
+  useKeepAlive({ onExpired: () => setReauth((r) => r || 'expired') })
 
   const total = form.questions.reduce((sum, q) => sum + (Number.parseInt(q.marks, 10) || 0), 0)
   const setQuestion = (i, patch) =>
@@ -155,7 +158,7 @@ function EditorForm({ initial, paperId, adminEmail }) {
         // Never navigate away here: that would throw away everything typed. Sign in over the page,
         // then save again.
         retryAfterSignIn.current = true
-        setReauth(true)
+        setReauth('save')
       } else {
         setError(errorMessage(err))
       }
@@ -179,11 +182,14 @@ function EditorForm({ initial, paperId, adminEmail }) {
     {reauth && (
       <ReauthDialog
         email={adminEmail}
+        saving={reauth === 'save'}
         onSignedIn={signedInAgain}
         onCancel={() => {
           retryAfterSignIn.current = false
           setReauth(false)
-          setError('Not saved: your session has timed out. Your work is still here and kept in this browser; press Save to sign in again.')
+          setError(reauth === 'save'
+            ? 'Not saved: your session has timed out. Your work is still here and kept in this browser; press Save to sign in again.'
+            : 'Your session has timed out. Your work is still here and kept in this browser; press Save to sign in again.')
         }}
       />
     )}

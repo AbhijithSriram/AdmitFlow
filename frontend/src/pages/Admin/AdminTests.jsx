@@ -241,6 +241,7 @@ export default function AdminTests() {
           <Link to="/admin/dashboard" className="hover:underline">Applicants</Link>
           <Link to="/admin/stats" className="hover:underline">Statistics</Link>
           <Link to="/admin/tests" className="underline">Tests</Link>
+          <Link to="/admin/content" className="hover:underline">Site content</Link>
         </nav>
       </header>
 

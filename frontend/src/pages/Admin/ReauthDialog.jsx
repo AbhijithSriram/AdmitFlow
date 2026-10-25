@@ -5,7 +5,9 @@ import { errorMessage } from './adminUtils'
 // Sign in again WITHOUT leaving the page. Long admin forms (the test editor) use this when the
 // session has expired, so the work on screen survives: the parent keeps its state and retries the
 // action once onSignedIn runs. (Navigating to /admin/auth instead throws all of it away.)
-export default function ReauthDialog({ email: initialEmail = '', onSignedIn, onCancel }) {
+// saving: a save was refused and runs again after sign-in. When false (the keep-alive found the session
+// gone while nothing was being saved) the dialog does not promise a save.
+export default function ReauthDialog({ email: initialEmail = '', saving = true, onSignedIn, onCancel }) {
   const [email, setEmail] = useState(initialEmail)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -30,9 +32,11 @@ export default function ReauthDialog({ email: initialEmail = '', onSignedIn, onC
       <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="reauth-title"
         className="bg-white rounded-lg w-full max-w-sm p-6 flex flex-col gap-4">
         <div>
-          <h2 id="reauth-title" className="text-lg font-semibold text-slate-900">Sign in again to save</h2>
+          <h2 id="reauth-title" className="text-lg font-semibold text-slate-900">{saving ? 'Sign in again to save' : 'Sign in again'}</h2>
           <p className="text-sm text-slate-700 mt-1">
-            Your session timed out. Nothing on this page has been lost: sign in and your work is saved straight away.
+            {saving
+              ? 'Your session timed out. Nothing on this page has been lost: sign in and your work is saved straight away.'
+              : 'Your session has ended. Nothing on this page has been lost: sign in to carry on where you were.'}
           </p>
         </div>
         <label className="flex flex-col gap-1 text-sm font-medium text-slate-800">
@@ -52,7 +56,7 @@ export default function ReauthDialog({ email: initialEmail = '', onSignedIn, onC
           </button>
           <button type="submit" disabled={busy || !email || !password}
             className="px-4 py-2 rounded-md bg-slate-900 text-white font-medium hover:bg-slate-700 disabled:opacity-50">
-            {busy ? 'Signing in…' : 'Sign in and save'}
+            {busy ? 'Signing in…' : saving ? 'Sign in and save' : 'Sign in'}
           </button>
         </div>
       </form>

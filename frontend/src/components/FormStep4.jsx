@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { COLLEGES, UNIVERSITIES, isUgProgramme } from '../content/institution';
+import { useContent } from '../context/ContentContext';
 import { stripFor, textError } from '../utils/textRules';
 
 // Step 4: Academic details. What is asked depends on the programme chosen in Step 3:
@@ -172,6 +172,8 @@ function Field({ label, required, error, className = '', children }) {
 
 export default function FormStep4({ initialData = {}, programme, onNext, onBack, onAutoSave }) {
   const saved = initialData || {};
+  const { content, isUgProgramme } = useContent();
+  const { colleges: COLLEGES, universities: UNIVERSITIES } = content.suggestions;
   const ug = isUgProgramme(programme);
   const initial = {};
   [...UG_KEYS, ...SCHOOL_KEYS].forEach((k) => {

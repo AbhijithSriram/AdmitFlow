@@ -4,6 +4,7 @@ from app.models.audit_log import AuditLog
 from app.models.form_draft import FormDraft
 from app.models.otp_token import OtpToken
 from app.models.payment import Payment
+from app.models.site_setting import SiteSetting
 from app.models.student import Student
 from app.models.test_paper import TestPaper
 from app.models.test_question import TestQuestion
@@ -17,6 +18,7 @@ __all__ = [
     "FormDraft",
     "OtpToken",
     "Payment",
+    "SiteSetting",
     "Student",
     "TestPaper",
     "TestQuestion",

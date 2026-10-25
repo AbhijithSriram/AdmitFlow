@@ -15,6 +15,11 @@ class BaseConfig:
 
     ADMIN_SESSION_COOKIE_NAME = "admitflow_admin_session"
 
+    # Academic-project disclaimer on every page, email and PDF. A per-deployment server setting (not
+    # site content), so no admin can switch it off on the public demo. A real college deployment sets
+    # ADMITFLOW_DEMO_MODE=0.
+    DEMO_MODE = os.environ.get("ADMITFLOW_DEMO_MODE", "1") == "1"
+
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
 
     MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT")

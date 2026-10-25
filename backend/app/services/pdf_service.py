@@ -15,6 +15,57 @@ def render_receipt_pdf(context: dict) -> bytes:
     return HTML(string=_receipt_template(context)).write_pdf()
 
 
+def render_brochure_pdf(content: dict, fee_inr: int, demo_footer: str | None = None) -> bytes:
+    """Render the information brochure (FR-1) from the site content (content_service.get_content()),
+    so it always matches what the site shows. Every value is escaped: the content is admin-edited.
+
+    Args:
+        content: the site content sections.
+        fee_inr: the application fee, used to fill {fee} placeholders.
+        demo_footer: the disclaimer for the page footer ("" for none, None for the default text).
+    """
+    return HTML(string=_brochure_template(content, fee_inr, demo_footer)).write_pdf()
+
+
+def _brochure_template(content: dict, fee_inr: int, demo_footer) -> str:
+    fill = lambda s: _esc(str(s).replace("{fee}", f"₹{fee_inr:,}"))  # noqa: E731
+    lis = lambda items: "".join(f"<li>{fill(x)}</li>" for x in items)  # noqa: E731
+    context = {} if demo_footer is None else {"demo_footer": demo_footer}
+    inst, contact, dates = content["institution"], content["contact"], content["dates"]
+    programmes = "".join(
+        f"<li><b>{_esc(p['name'])}</b> ({'undergraduate' if p['level'] == 'UG' else 'postgraduate'}): "
+        f"{_esc(', '.join(p['specialisations']))}</li>" for p in content["programmes"])
+    date_rows = "".join(f"<tr><td>{_esc(d['label'])}</td><td><b>{_esc(d['value'])}</b></td></tr>" for d in dates["items"])
+    about = "".join(f"<p>{fill(p)}</p>" for p in inst.get("about", []))
+    contact_lines = "<br>".join(_esc(v) for v in (contact.get("email"), contact.get("phone"), contact.get("address"),
+                                                  contact.get("hours")) if v)
+    note = f"<p>{_esc(contact['note'])}</p>" if contact.get("note") else ""
+    dates_note = f"<p class='sub'>{_esc(dates['note'])}</p>" if dates.get("note") else ""
+    documents = f"<h2>Original documents checked at admission</h2><ul>{lis(content['documents'])}</ul>" if content["documents"] else ""
+    about_box = f"<div class='about'>{about}</div>" if about else ""
+    return f"""
+    <html><head><style>
+      {_style(context)}
+      body {{ font-size: 12px; line-height: 1.45; }}
+      h2 {{ font-size: 15px; margin: 18px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px; color: #111; font-weight: bold; }}
+      .sub {{ color: #555; margin: 2px 0 12px; }}
+      .about {{ border: 1px solid #ccc; background: #f7f7f7; padding: 4px 10px; border-radius: 4px; }}
+      td {{ padding: 3px 14px 3px 0; vertical-align: top; border: none; }} li {{ margin: 2px 0; }}
+    </style></head><body>
+      <h1>{_esc(inst['name'])}</h1>
+      <p class="sub">Information brochure: admissions</p>
+      {about_box}
+      <h2>Programmes</h2><ul>{programmes}</ul>
+      <h2>Eligibility</h2><ul>{lis(content['eligibility'])}</ul>
+      <h2>Important dates</h2><table>{date_rows}</table>{dates_note}
+      <h2>Application fee</h2><p>{_esc(f"Rs. {fee_inr:,}")} (non-refundable), paid online after the application form is complete.</p>
+      <h2>How to apply</h2><ol>{lis([g for g in content['guidelines'] if 'I Agree' not in g])}</ol>
+      {documents}
+      <h2>Contact</h2><p>{contact_lines}</p>{note}
+    </body></html>
+    """
+
+
 def _esc(value) -> str:
     """Escape a value before interpolating it into the HTML template. Form field
     values come from applicant input, so this prevents a field like a name or address
@@ -74,14 +125,37 @@ def _rows_html(data: dict) -> str:
     return "".join(sections) or "<p><em>No form data recorded.</em></p>"
 
 
-# Printed at the foot of every page of every PDF (application, receipt, export). These files are emailed
-# and downloaded, so they travel without the website's own notice and must say what they are.
+# Printed at the foot of every page of every PDF (application, receipt, export, brochure). These files
+# are emailed and downloaded, so they travel without the website's own notice and must say what they
+# are. Callers pass context["demo_footer"] (content_service.demo_footer(): the institution's name,
+# or "" on a real deployment); this is the text used when a caller passes none.
 DEMO_FOOTER = ("AdmitFlow is an academic project: AdmitFlow Institute is fictional. "
                "This document is not issued by any real college and is not an offer of admission.")
 
+
+def _css_string(value: str) -> str:
+    """Text safe inside a CSS "..." string inside an HTML <style> element. The institution name in it
+    is admin-editable, so a quote, a backslash or a '</style>' must not end the string or the element."""
+    out = []
+    for ch in str(value):
+        if ch in '"\\<>' or ord(ch) < 0x20:
+            out.append(f"\\{ord(ch):x} ")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _style(context: dict) -> str:
+    """The shared page style, with the disclaimer footer unless the caller turned it off."""
+    footer = context.get("demo_footer", DEMO_FOOTER)
+    page = "@page { size: A4; margin: 2cm; }"
+    if footer:
+        page = ('@page { size: A4; margin: 2cm; @bottom-center { content: "%s"; font-size: 8px; color: #777; } }'
+                % _css_string(footer))
+    return page + _BASE_STYLE
+
+
 _BASE_STYLE = """
-@page { size: A4; margin: 2cm;
-        @bottom-center { content: "%s"; font-size: 8px; color: #777; } }""" % DEMO_FOOTER + """
 body { font-family: sans-serif; color: #111; }
 h1 { margin-bottom: 0; }
 h2 { color: #444; font-weight: normal; margin-top: 0.2cm; }
@@ -105,7 +179,7 @@ def _application_template(context: dict) -> str:
     <html>
       <head>
         <style>
-          {_BASE_STYLE}
+          {_style(context)}
           .photo {{ float: right; width: 3cm; height: 4cm; object-fit: cover; border: 1px solid #999; }}
           .signature {{ width: 4cm; margin-top: 0.5cm; }}
           .declaration {{ margin-top: 1cm; font-size: 11px; color: #333; }}
@@ -150,7 +224,7 @@ def _applicants_template(context: dict) -> str:
     <html>
       <head>
         <style>
-          {_BASE_STYLE}
+          {_style(context)}
           @page {{ size: A4 landscape; margin: 1.2cm; @bottom-right {{ content: "Page " counter(page) " of " counter(pages); font-size: 9px; }} }}
           .meta {{ font-size: 11px; color: #444; margin: 0.1cm 0; }}
           th {{ text-align: left; font-size: 10px; padding: 4px 6px; border-bottom: 2px solid #333; background: #f2f2f2; }}
@@ -173,7 +247,7 @@ def _applicants_template(context: dict) -> str:
 def _receipt_template(context: dict) -> str:
     return f"""
     <html>
-      <head><style>{_BASE_STYLE}</style></head>
+      <head><style>{_style(context)}</style></head>
       <body>
         <h1>{_esc(context.get('institution_name', 'AdmitFlow'))}</h1>
         <h2>Payment Receipt</h2>
