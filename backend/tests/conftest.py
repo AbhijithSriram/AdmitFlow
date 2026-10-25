@@ -25,8 +25,11 @@ def _schema():
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-    for name in ("schema.sql", "002_admin_portal.sql", "005_aptitude_tests.sql"):
-        cur.execute((MIGRATIONS / name).read_text())
+    cur.execute((MIGRATIONS / "schema.sql").read_text())
+    # every numbered migration, in order (the same rule as deploy/homeserver/install.sh),
+    # so a new migration such as 006 is picked up without editing this file
+    for migration in sorted(MIGRATIONS.glob("[0-9][0-9][0-9]_*.sql")):
+        cur.execute(migration.read_text())
     conn.close()
 
 
