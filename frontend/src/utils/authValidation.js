@@ -8,6 +8,16 @@ const PHONE_PATTERN = /^\d{10}$/
 
 export const GENDERS = ['Male', 'Female', 'Other']
 
+// The signup mobile box keeps digits only, dropping anything else as it is typed (as the name box drops
+// digits). A pasted or autofilled "+91 98765 43210" or "098765 43210" loses its country/trunk prefix, so
+// the 10-digit national number survives; beyond 10 digits, further typing is ignored.
+export function toMobileDigits(value) {
+  let digits = String(value ?? '').replace(/\D/g, '')
+  if (digits.length > 10 && digits.startsWith('91')) digits = digits.slice(2)
+  else if (digits.length > 10 && digits.startsWith('0')) digits = digits.slice(1)
+  return digits.slice(0, 10)
+}
+
 export function validateEmail(email) {
   return EMAIL_PATTERN.test(email.trim()) ? '' : 'Enter a valid email address.'
 }

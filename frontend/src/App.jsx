@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard'
 import InfoPage from './pages/InfoPage'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
+import NotFound from './pages/NotFound'
 import OtpVerification from './pages/OtpVerification'
 import SetPassword from './pages/SetPassword'
 import Signup from './pages/Signup'
@@ -63,6 +64,8 @@ export default function App() {
       <Route path="/admin/tests/new" element={<TestEditor />} />
       <Route path="/admin/tests/:paperId" element={<TestEditor />} />
       <Route path="/admin/stats" element={<AdminStats />} />
+      {/* Anything else: a "Page not found" page instead of a blank screen. Keep this last. */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

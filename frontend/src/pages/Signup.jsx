@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/client'
 import Recaptcha, { RECAPTCHA_SITE_KEY } from '../components/Recaptcha'
-import { GENDERS, validateSignup } from '../utils/authValidation'
+import { GENDERS, toMobileDigits, validateSignup } from '../utils/authValidation'
 import { stripFor } from '../utils/textRules'
 
 const EMPTY_FORM = { fullName: '', dateOfBirth: '', gender: '', email: '', phone: '' }
@@ -105,10 +105,9 @@ export default function Signup() {
           <input
             type="tel"
             inputMode="numeric"
-            maxLength={10}
             className={INPUT_CLASS}
             value={form.phone}
-            onChange={setField('phone')}
+            onChange={(event) => setForm((prev) => ({ ...prev, phone: toMobileDigits(event.target.value) }))}
             autoComplete="tel-national"
           />
         </Field>
