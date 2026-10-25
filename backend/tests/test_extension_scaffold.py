@@ -61,9 +61,8 @@ def test_admin_stubs_answer_501_to_an_admin(logged_in, method, path):
     assert resp.json == {"success": False, "error": "Not implemented"}
 
 
-# GET /api/student/tests and start are implemented: see test_student_tests.py.
+# GET /api/student/tests, start and answers are implemented: see test_student_tests.py.
 STUDENT_STUB_ROUTES = [
-    ("PUT", "/api/student/tests/p1/answers"),
     ("POST", "/api/student/tests/p1/submit"),
 ]
 

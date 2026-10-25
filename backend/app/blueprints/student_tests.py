@@ -8,7 +8,7 @@ trusted from the browser. The contract is in REMAINING_WORK.md section 3.
 import logging
 from datetime import datetime
 
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, request, session
 
 from app.extensions import db
 from app.middleware.auth_guard import login_required
@@ -45,6 +45,30 @@ def _paid_application():
 
 
 NOT_PAID = "Aptitude tests are available once your application fee has been paid."
+OPTIONS = ("A", "B", "C", "D")
+
+
+def _locked_assignment(application, paper_id):
+    """(submission, paper) for this application's assignment on a published paper, or None.
+    The submission row is locked until the next commit, so two tabs (or a start racing an
+    auto-save) can't both read and write it."""
+    if not is_uuid(paper_id):
+        return None
+    return (
+        db.session.query(TestSubmission, TestPaper)
+        .join(TestPaper, TestPaper.id == TestSubmission.test_paper_id)
+        .filter(TestSubmission.application_id == application.id, TestSubmission.test_paper_id == paper_id,
+                TestPaper.is_published.is_(True))
+        .with_for_update(of=TestSubmission)
+        .first()
+    )
+
+
+def _close_if_expired(sub, paper, application, now):
+    """Lazy submit; commits (releasing the row lock) when it closed the attempt."""
+    if test_service.finalise_if_expired(sub, paper, now):
+        db.session.commit()
+        log.info("test closed at deadline paper_id=%s application_id=%s", paper.id, application.id)
 
 
 @student_tests_bp.route("", methods=["GET"])
@@ -85,26 +109,13 @@ def start_test(paper_id):
     application = _paid_application()
     if application is None:
         return _fail(NOT_PAID, 403)
-    if not is_uuid(paper_id):
-        return _fail("Test not found.", 404)
-
-    # Lock the row so two tabs starting at once can't both set started_at.
-    found = (
-        db.session.query(TestSubmission, TestPaper)
-        .join(TestPaper, TestPaper.id == TestSubmission.test_paper_id)
-        .filter(TestSubmission.application_id == application.id, TestSubmission.test_paper_id == paper_id,
-                TestPaper.is_published.is_(True))
-        .with_for_update(of=TestSubmission)
-        .first()
-    )
+    found = _locked_assignment(application, paper_id)
     if found is None:
         return _fail("Test not found.", 404)
     sub, paper = found
 
     now = datetime.utcnow()
-    if test_service.finalise_if_expired(sub, paper, now):
-        db.session.commit()
-        log.info("test closed at deadline paper_id=%s application_id=%s", paper.id, application.id)
+    _close_if_expired(sub, paper, application, now)
     if sub.submitted_at is not None:
         db.session.commit()  # release the row lock
         return _fail("You have already submitted this test.", 409)
@@ -133,8 +144,40 @@ def start_test(paper_id):
 @student_tests_bp.route("/<paper_id>/answers", methods=["PUT"])
 @login_required
 def save_answers(paper_id):
-    """Save {question_id: "A".."D"}. Refused after the deadline."""
-    return _not_implemented()
+    """Save {question_id: "A".."D"}, merged into the picks saved so far. Ids that are not questions
+    on this paper are ignored. Refused before start, after the deadline and once submitted."""
+    application = _paid_application()
+    if application is None:
+        return _fail(NOT_PAID, 403)
+
+    body = request.get_json(silent=True)
+    picks = body.get("answers") if isinstance(body, dict) else None
+    if not isinstance(picks, dict):
+        return _fail("Send the answers as an object of question id to option.", 400)
+    if any(p not in OPTIONS for p in picks.values()):
+        return _fail("Each answer must be one of A, B, C or D.", 400)
+
+    found = _locked_assignment(application, paper_id)
+    if found is None:
+        return _fail("Test not found.", 404)
+    sub, paper = found
+
+    now = datetime.utcnow()
+    _close_if_expired(sub, paper, application, now)
+    if sub.submitted_at is not None:
+        db.session.commit()  # release the row lock
+        return _fail("This test has ended, so answers can no longer be changed.", 409)
+    if sub.started_at is None:
+        db.session.commit()
+        return _fail("Start the test before answering.", 409)
+
+    on_paper = {str(q.id) for q in paper.questions}
+    # A new dict (not an in-place update) so SQLAlchemy sees the JSONB column change.
+    sub.answers = {**(sub.answers or {}), **{qid: p for qid, p in picks.items() if qid in on_paper}}
+    db.session.commit()
+
+    closes = test_service.deadline(sub, paper)
+    return _ok({"answers": sub.answers, "seconds_left": max(0, int((closes - now).total_seconds()))})
 
 
 @student_tests_bp.route("/<paper_id>/submit", methods=["POST"])
