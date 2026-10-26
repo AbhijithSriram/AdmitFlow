@@ -61,8 +61,8 @@ def update_test(paper_id):
 @admin_tests_bp.route("/<paper_id>", methods=["DELETE"])
 @admin_required
 def delete_test(paper_id):
-    """Delete a paper. Refused (409) once it has submissions."""
-    return _run(lambda: svc.delete_paper(paper_id) or {"deleted": True})
+    """Delete a paper and its assignments. Refused (409) once anyone has started it."""
+    return _run(lambda: svc.delete_paper(paper_id, g.admin) or {"deleted": True})
 
 
 @admin_tests_bp.route("/<paper_id>/publish", methods=["POST"])

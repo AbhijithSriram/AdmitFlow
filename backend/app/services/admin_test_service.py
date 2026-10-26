@@ -152,11 +152,16 @@ def list_papers() -> list[dict]:
     counts = _submission_counts([str(p.id) for p in papers])
     qcounts = {str(k): v for k, v in db.session.execute(
         select(TestQuestion.test_paper_id, func.count()).group_by(TestQuestion.test_paper_id)).all()}
+    # The page offers Delete until anyone has started (delete_paper's rule).
+    started = {str(k): v for k, v in db.session.execute(
+        select(TestSubmission.test_paper_id, func.count(TestSubmission.started_at))
+        .group_by(TestSubmission.test_paper_id)).all()}
     out = []
     for p in papers:
         assigned, submitted = counts.get(str(p.id), (0, 0))
         d = _paper_dict(p, assigned, submitted)
         d["question_count"] = qcounts.get(str(p.id), 0)
+        d["started"] = started.get(str(p.id), 0)
         out.append(d)
     return out
 
@@ -234,13 +239,18 @@ def update_paper(paper_id: str, body) -> dict:
     return get_paper(str(paper.id))
 
 
-def delete_paper(paper_id: str) -> None:
-    """Delete a paper. Refused (409) once any applicant is assigned: test_submissions has no cascade."""
+def delete_paper(paper_id: str, admin) -> None:
+    """Delete a paper, and its assignments while nobody has started it (so a test assigned by
+    mistake does not stay on students' dashboards). Refused (409) once anyone has started:
+    their answers and scores are kept. test_submissions has no cascade, so its rows go first."""
     paper = get_paper_or_404(paper_id)
-    if _submission_counts([str(paper.id)]).get(str(paper.id), (0, 0))[0]:
-        raise ServiceError(409, "This test already has assigned applicants, so it can't be deleted.")
+    subs = TestSubmission.query.filter_by(test_paper_id=paper.id)
+    if subs.filter(TestSubmission.started_at.isnot(None)).count():
+        raise ServiceError(409, "Someone has already started this test, so it can't be deleted.")
+    removed = subs.delete(synchronize_session=False)
     db.session.delete(paper)  # its questions go with it
-    db.session.commit()
+    _commit_with_audit(admin.id, "TEST_DELETED",
+                       {"paper_id": str(paper.id), "title": paper.title, "assignments_removed": removed})
 
 
 def publish_paper(paper_id: str, admin) -> dict:
