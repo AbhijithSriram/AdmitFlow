@@ -1,0 +1,75 @@
+{
+  "1": [
+    ["full_name", "Full name"],
+    ["date_of_birth", "Date of birth"],
+    ["gender", "Gender"],
+    ["email", "Email"],
+    ["phone", "Phone"],
+    ["father_name", "Father's name"],
+    ["mother_name", "Mother's name"],
+    ["guardian_name", "Guardian's name"],
+    ["guardian_relationship", "Guardian's relationship"],
+    ["religion", "Religion"],
+    ["community", "Community"],
+    ["ews", "EWS"],
+    ["mother_tongue", "Mother tongue"],
+    ["nationality", "Nationality"],
+    ["native_state", "Native state"],
+    ["country", "Country"],
+    ["passport_number", "Passport number"]
+  ],
+  "2": [
+    ["perm_line1", "Permanent address, line 1"],
+    ["perm_line2", "Permanent address, line 2"],
+    ["perm_town", "Permanent address, town / city"],
+    ["perm_pincode", "Permanent address, pincode"],
+    ["perm_district", "Permanent address, district"],
+    ["perm_state", "Permanent address, state"],
+    ["perm_country", "Permanent address, country"],
+    ["same_as_permanent", "Communication address same as permanent"],
+    ["comm_line1", "Communication address, line 1"],
+    ["comm_line2", "Communication address, line 2"],
+    ["comm_town", "Communication address, town / city"],
+    ["comm_pincode", "Communication address, pincode"],
+    ["comm_district", "Communication address, district"],
+    ["comm_state", "Communication address, state"],
+    ["comm_country", "Communication address, country"]
+  ],
+  "3": [
+    ["programme", "Programme"],
+    ["specialisation", "Specialisation"]
+  ],
+  "4": [
+    ["ug_degree", "UG degree"],
+    ["ug_degree_other", "UG degree name"],
+    ["ug_specialisation", "UG specialisation"],
+    ["status", "UG degree status"],
+    ["college", "College"],
+    ["university", "University"],
+    ["passing_month", "UG month of passing"],
+    ["passing_year", "UG year of passing"],
+    ["score_type", "UG score type"],
+    ["score", "UG score"],
+    ["xii_status", "Class XII status"],
+    ["xii_board", "Class XII board"],
+    ["xii_group", "Class XII subject group"],
+    ["xii_school", "Class XII school"],
+    ["xii_year", "Class XII year of passing"],
+    ["xii_percentage", "Class XII percentage"],
+    ["x_board", "Class X board"],
+    ["x_school", "Class X school"],
+    ["x_year", "Class X year of passing"],
+    ["x_percentage", "Class X percentage"]
+  ],
+  "5": [
+    ["entrance_status", "Entrance exam status"],
+    ["result_year", "Year of exam result"],
+    ["result_month", "Month of exam result"],
+    ["registration_number", "Registration number"],
+    ["score", "Score"],
+    ["paper_code", "Paper / subject code"]
+  ],
+  "6": [
+    ["id_proof_type", "ID proof type"]
+  ]
+}

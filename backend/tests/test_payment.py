@@ -247,7 +247,7 @@ def test_form_data_is_grouped_by_step_so_repeated_field_names_survive(client, ma
 
     grouped = _collect_form_data(application.id)
 
-    assert grouped == {"Academic Details": {"score": "8.7"}, "Entrance / Test Details": {"score": "88"}}
+    assert grouped == {"Academic Details": [("UG score", "8.7")], "Entrance / Test Details": [("Score", "88")]}
     html = pdf_service._rows_html(grouped)
     assert "8.7" in html and "88" in html  # a flat merge would have kept only one of them
 
@@ -303,7 +303,7 @@ def test_internal_storage_keys_are_not_printed_on_the_application(client, make_s
     }))
     db.session.commit()
 
-    assert _collect_form_data(application.id) == {"Documents": {"id_proof_type": "Aadhaar"}}
+    assert _collect_form_data(application.id) == {"Documents": [("ID proof type", "Aadhaar")]}
 
 
 def test_pdf_labels_expand_abbreviations():

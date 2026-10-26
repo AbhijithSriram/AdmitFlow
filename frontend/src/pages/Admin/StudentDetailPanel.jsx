@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
 import StatusBadge from '../../components/StatusBadge'
-import { humanize, isInternalKey } from '../../utils/fieldLabels'
+import { orderedRows } from '../../utils/fieldLabels'
 import { errorMessage, formatDate, formatDateTime } from './adminUtils'
 
 const STEP_TITLES = { 1: 'Personal details', 2: 'Address', 3: 'Programme preference', 4: 'Academic details', 5: 'Entrance / test details', 6: 'ID proof details' }
@@ -142,7 +142,7 @@ export default function StudentDetailPanel({ studentId, onClose, onDelete, onUna
 
             {Object.entries(detail.steps).map(([n, data]) => (
               <Section key={n} title={STEP_TITLES[n] || `Step ${n}`}>
-                <Fields rows={Object.entries(data).filter(([k]) => !isInternalKey(k)).map(([k, v]) => [humanize(k), v])} />
+                <Fields rows={orderedRows(Number(n), data)} />
               </Section>
             ))}
 

@@ -112,14 +112,19 @@ def _humanize(label: str) -> str:
 
 
 def _rows_html(data: dict) -> str:
-    """One titled table per step. `data` maps a step title to that step's saved fields."""
+    """One titled table per step. `data` maps a step title to that step's saved fields: either
+    (label, value) rows already in order (form_fields.ordered_rows), or a raw dict to flatten."""
     sections = []
     for title, fields in (data or {}).items():
-        rows = _flatten(fields) if isinstance(fields, dict) else [(title, fields)]
+        if isinstance(fields, list):
+            rows, label_of = fields, str
+        else:
+            rows = _flatten(fields) if isinstance(fields, dict) else [(title, fields)]
+            label_of = _humanize
         if not rows:
             continue
         cells = "".join(
-            f"<tr><td class='label'>{_esc(_humanize(label))}</td><td>{_esc(value)}</td></tr>" for label, value in rows
+            f"<tr><td class='label'>{_esc(label_of(label))}</td><td>{_esc(value)}</td></tr>" for label, value in rows
         )
         sections.append(f"<h3>{_esc(title)}</h3><table>{cells}</table>")
     return "".join(sections) or "<p><em>No form data recorded.</em></p>"
