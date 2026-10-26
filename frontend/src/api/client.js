@@ -48,6 +48,9 @@ export const applicationApi = {
   paymentFailed: (payload) => apiClient.post('/api/app/payment/failed', payload),
   getReceipt: (applicationId) => apiClient.get(`/api/app/receipt/${applicationId}`),
 }
+// The fee receipt PDF, opened as a plain link (like the brochure) so no popup blocker gets in the way.
+export const receiptPdfUrl = (applicationId) =>
+  `${apiClient.defaults.baseURL ?? ''}/api/app/receipt/${applicationId}/pdf`
 
 // Site content (v1.1 FR-12): loaded once at start-up by ContentContext; edited at /admin/content.
 export const contentApi = {

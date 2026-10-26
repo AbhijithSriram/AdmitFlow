@@ -443,3 +443,69 @@ def test_payment_events_are_logged_without_secrets(client, make_student, no_deli
     assert "payment confirmed order=order_2 payment=pay_2" in text
     for secret in (signature, _sign("order_2", "pay_2"), "deadbeef", SECRET):
         assert secret not in text
+
+
+# ------------------------------------------------- malformed ids and the fee receipt
+@pytest.mark.parametrize("bad_id", ["not-a-uuid", "123", "x'or'1'='1"])
+def test_a_malformed_application_id_is_a_json_404_not_a_500(client, make_student, bad_id):
+    _login_as(client, make_student(status="PAID", payment="SUCCESS"))
+    for method, path in (("get", f"/api/app/draft/{bad_id}"),
+                         ("patch", f"/api/app/draft/{bad_id}/step/1"),
+                         ("post", f"/api/app/upload/{bad_id}/photo"),
+                         ("get", f"/api/app/receipt/{bad_id}"),
+                         ("get", f"/api/app/receipt/{bad_id}/pdf")):
+        resp = getattr(client, method)(path, json={}) if method == "patch" else getattr(client, method)(path)
+        assert resp.status_code == 404, (method, path, resp.status_code)
+        assert resp.is_json and resp.get_json()["success"] is False, (method, path)
+
+
+@pytest.fixture
+def receipts(monkeypatch):
+    """Record what the fee receipt is rendered with, without running WeasyPrint."""
+    from app.services import pdf_service
+
+    rendered = []
+    monkeypatch.setattr(pdf_service, "render_receipt_pdf", lambda ctx: rendered.append(ctx) or b"%PDF-receipt")
+    return rendered
+
+
+def test_the_fee_receipt_is_a_pdf_with_the_amount_paid(client, make_student, receipts):
+    student = make_student(status="PAID", payment="SUCCESS")
+    _login_as(client, student)
+
+    resp = client.get(f"/api/app/receipt/{_application_of(student).id}/pdf")
+
+    assert resp.status_code == 200 and resp.mimetype == "application/pdf"
+    assert resp.data == b"%PDF-receipt"
+    assert "inline" in resp.headers["Content-Disposition"] and "receipt" in resp.headers["Content-Disposition"]
+    ctx = receipts[0]
+    assert (ctx["full_name"], ctx["programme"], ctx["payment_id"], ctx["order_id"]) == (
+        "Test Student", "B.Tech", "p2", "o2")
+    assert str(ctx["amount"]) == "500.00"           # the successful payment, not the failed attempt before it
+
+
+def test_the_fee_receipt_belongs_to_its_owner_only(client, make_student, receipts):
+    owner = make_student(status="PAID", payment="SUCCESS")
+    _login_as(client, make_student(status="PAID", payment="SUCCESS"))
+    assert client.get(f"/api/app/receipt/{_application_of(owner).id}/pdf").status_code == 404
+    assert receipts == []
+
+
+def test_no_fee_receipt_before_a_successful_payment(client, make_student, receipts):
+    student = make_student(status="PAYMENT_PENDING", payment="FAILED")
+    _login_as(client, student)
+    resp = client.get(f"/api/app/receipt/{_application_of(student).id}/pdf")
+    assert resp.status_code == 404 and resp.get_json()["success"] is False
+    assert receipts == []
+
+
+def test_the_fee_receipt_needs_a_login(client, make_student):
+    student = make_student(status="PAID", payment="SUCCESS")
+    assert client.get(f"/api/app/receipt/{_application_of(student).id}/pdf").status_code == 401
+
+
+def test_the_fee_receipt_really_renders(client, make_student):
+    student = make_student(status="PAID", payment="SUCCESS")
+    _login_as(client, student)
+    resp = client.get(f"/api/app/receipt/{_application_of(student).id}/pdf")
+    assert resp.status_code == 200 and resp.data.startswith(b"%PDF")
