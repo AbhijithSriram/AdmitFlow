@@ -6,6 +6,7 @@ import FormStep4 from '../components/FormStep4';
 import FormStep5 from '../components/FormStep5';
 import FormStep6 from '../components/FormStep6';
 import FormStep7 from '../components/FormStep7';
+import { resumeStep as pickResumeStep } from '../utils/resumeStep';
 import FormStepNav from '../components/FormStepNav';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient, applicationApi } from '../api/client';
@@ -131,7 +132,7 @@ function ApplicationFormBody() {
       resumedRef.current = true;
       setDraft(rehydrate.draft);
       setDocuments(rehydrate.documents);
-      const resume = Math.min(6, Math.max(1, rehydrate.lastStep));
+      const resume = pickResumeStep(rehydrate.lastStep, rehydrate.draft);
       const maxStep = Math.min(7, Math.max(1, rehydrate.lastStep + 1));
       const asked = Number.parseInt(askedStepRef.current ?? '', 10);
       const target = Number.isInteger(asked) && asked >= 1 && asked <= maxStep ? asked : resume;

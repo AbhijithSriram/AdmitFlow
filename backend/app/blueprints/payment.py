@@ -7,7 +7,7 @@ from flask import Blueprint, abort, current_app, jsonify, make_response, request
 from app.extensions import db
 from app.middleware.auth_guard import login_required
 from app.models import Application, FormDraft, Payment, Student
-from app.services import content_service, email_service, minio_service, payment_service, pdf_service
+from app.services import content_service, email_service, form_fields, minio_service, payment_service, pdf_service
 
 log = logging.getLogger(__name__)
 payment_bp = Blueprint("payment", __name__)
@@ -49,9 +49,10 @@ def _collect_form_data(application_id: str) -> dict:
     for draft in drafts:
         # `*_url` entries are internal storage keys (applications/<id>/photo.png), not
         # something an applicant should see printed on their application.
-        fields = {key: value for key, value in (draft.data or {}).items() if not key.endswith("_url")}
-        if fields:
-            sections[STEP_TITLES.get(draft.step_number, f"Step {draft.step_number}")] = fields
+        # form_fields also puts them back in the form's order with readable labels (JSONB sorts keys).
+        rows = form_fields.ordered_rows(draft.step_number, draft.data)
+        if rows:
+            sections[STEP_TITLES.get(draft.step_number, f"Step {draft.step_number}")] = rows
     return sections
 
 

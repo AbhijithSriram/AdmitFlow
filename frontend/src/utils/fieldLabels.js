@@ -1,5 +1,6 @@
 // Turns saved form fields into something a person can read. Used by the payment preview
-// and the admin detail panel. Generic on purpose: the field names belong to Steps 1-6.
+// and the admin detail panel.
+import FORM_FIELDS from './formFields.json' with { type: 'json' }
 
 const WORDS = {
   ews: 'EWS', ug: 'UG', id: 'ID', cgpa: 'CGPA', x: 'Class X', xii: 'Class XII',
@@ -24,6 +25,19 @@ export function humanize(label) {
 
 // `*_url` entries are internal storage keys (applications/<id>/photo.png), not for people.
 export const isInternalKey = (key) => key.endsWith('_url')
+
+// [label, value] rows for one saved step, in the order the form asks them. The database (JSONB)
+// returns a step's keys sorted, so the order and labels come from formFields.json; a field it does
+// not list yet still shows, last. The backend's application PDF uses an identical copy of that file.
+export function orderedRows(step, data) {
+  const saved = Object.fromEntries(Object.entries(data ?? {}).filter(([key]) => !isInternalKey(key)))
+  const known = FORM_FIELDS[step] ?? []
+  const listed = new Set(known.map(([key]) => key))
+  return [
+    ...known.filter(([key]) => key in saved).map(([key, label]) => [label, saved[key]]),
+    ...Object.entries(saved).filter(([key]) => !listed.has(key)).map(([key, value]) => [humanize(key), value]),
+  ]
+}
 
 // Flattens one (possibly nested) object into "label -> value" rows, skipping internal keys.
 export function flatten(data, prefix = '') {

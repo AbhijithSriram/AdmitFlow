@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { applicationApi, studentApi } from '../api/client'
 import { usePayment } from '../hooks/usePayment'
-import { display, flatten, humanize } from '../utils/fieldLabels'
+import { display, orderedRows } from '../utils/fieldLabels'
 
 // FR-6.9: Step 7 — Preview & Payment (read-only summary, declaration, Razorpay checkout).
 //
@@ -103,8 +103,8 @@ export default function FormStep7({ onBack }) {
 
   const sections = Object.keys(steps)
     .sort((a, b) => Number(a) - Number(b))
-    .map((key) => ({ title: STEP_TITLES[key] ?? `Step ${key}`, rows: flatten(steps[key]) }))
-    .filter((section) => Object.keys(section.rows).length > 0)
+    .map((key) => ({ title: STEP_TITLES[key] ?? `Step ${key}`, rows: orderedRows(Number(key), steps[key]) }))
+    .filter((section) => section.rows.length > 0)
 
   const busy = status === 'creating' || status === 'processing'
 
@@ -118,9 +118,9 @@ export default function FormStep7({ onBack }) {
         <div key={section.title} className="mb-5">
           <h3 className="font-semibold mb-1">{section.title}</h3>
           <div className="border rounded divide-y">
-            {Object.entries(section.rows).map(([label, value]) => (
+            {section.rows.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4 px-3 py-2 text-sm">
-                <span className="text-gray-500">{humanize(label)}</span>
+                <span className="text-gray-500">{label}</span>
                 <span className="font-medium text-right">{display(value)}</span>
               </div>
             ))}
