@@ -60,6 +60,12 @@ Stored in the `site_settings` table (migration 007), one row per section.
 - **Academic-project notice.** While `ADMITFLOW_DEMO_MODE` is on, every page, PDF and email says the site is an
   academic project, and search engines are asked not to index it.
 - **HTTPS only.** A visit to `http://` is redirected to `https://` by nginx; unknown addresses show "Page not found".
+- **Receipts and documents (FR-5, FR-8).** View Receipt opens a fee receipt generated from the successful payment
+  (`GET /api/app/receipt/<id>/pdf`); the application PDF has its own dashboard link
+  (`GET /api/app/application-pdf/<id>`, a redirect to a 15-minute signed link). Answers appear in the form's order
+  with readable labels in the preview, the application PDF and the staff panel. Malformed ids get a JSON 404.
+- **Deleting a test (FR-10).** A test can be deleted, with its assignments, until any applicant has started it; the
+  deletion is audited (`TEST_DELETED`). Once anyone has started, it is refused so answers and scores are kept.
 
 ## 4. Deployment differs from SRD section 5.3
 

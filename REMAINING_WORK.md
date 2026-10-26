@@ -347,4 +347,6 @@ raise it now, because they decide what gets built.
 7. **Aptitude score column (decided by Person 4):** the applicants table and the applicant detail panel show the score of
    the applicant's most recently *submitted* test (a dash if none). The detail panel lists every assigned test with its
    status and score. The value is `aptitude_score` in `admin_service.applicant_query()`, so the export can add it as a
-   column. Admins cannot un-publish a test: a published test cannot be edited or deleted once applicants are assigned.
+   column. Admins cannot un-publish a test: a published test cannot be edited. It can be deleted, assignments
+   included, until any applicant has started it (changed 26 October 2026, so a test assigned by mistake can be
+   removed); after that it is kept with its answers and scores.

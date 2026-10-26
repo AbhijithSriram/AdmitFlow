@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BROCHURE_URL, receiptPdfUrl, studentApi } from '../api/client'
+import { BROCHURE_URL, applicationPdfUrl, receiptPdfUrl, studentApi } from '../api/client'
 import AppHeader from '../components/AppHeader'
 import StatusBadge from '../components/StatusBadge'
 import TestsCard from '../components/TestsCard'
@@ -83,9 +83,16 @@ export default function Dashboard() {
               {status === 'NOT_STARTED' ? 'Start Application' : 'Continue Application'}
             </Link>
           )}
-          {data?.has_receipt && (
+          {/* The fee receipt is built from the payment, so every paid applicant has one; the
+              application PDF exists once it has been generated after payment (FR-8). */}
+          {status === 'PAID' && data?.application_id && (
             <a href={receiptPdfUrl(data.application_id)} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded border">
               View Receipt
+            </a>
+          )}
+          {data?.has_receipt && (
+            <a href={applicationPdfUrl(data.application_id)} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded border">
+              Application PDF
             </a>
           )}
           <a href={BROCHURE_URL} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded border">

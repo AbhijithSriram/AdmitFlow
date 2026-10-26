@@ -2,9 +2,9 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 
-from flask import Blueprint, abort, current_app, jsonify, make_response, request, session
+from flask import Blueprint, abort, current_app, jsonify, make_response, redirect, request, session
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.middleware.auth_guard import login_required
 from app.models import Application, FormDraft, Payment, Student
 from app.services import content_service, email_service, form_fields, minio_service, payment_service, pdf_service
@@ -240,8 +240,20 @@ def get_receipt(application_id):
     return jsonify({"success": True, "data": {"url": url}})
 
 
+@payment_bp.route("/app/application-pdf/<application_id>", methods=["GET"])
+@login_required
+def open_application_pdf(application_id):
+    """The application PDF (SRD FR-8: downloadable from the dashboard), as a plain link: redirects to
+    a 15-minute presigned URL, so the browser opens it directly and no popup blocker gets in the way."""
+    application = _own_application(application_id, session["student_id"])
+    if application is None or not application.pdf_url:
+        return jsonify({"success": False, "error": "Application PDF not available yet"}), 404
+    return redirect(minio_service.get_presigned_url(application.pdf_url), code=302)
+
+
 @payment_bp.route("/app/receipt/<application_id>/pdf", methods=["GET"])
 @login_required
+@limiter.limit("20 per minute")  # rendered on every request, like the brochure
 def get_fee_receipt_pdf(application_id):
     """The fee receipt (amount, payment and order ids), built from the successful payment each time
     it is asked for, so every paid applicant has one and nothing extra is stored. A plain link opens

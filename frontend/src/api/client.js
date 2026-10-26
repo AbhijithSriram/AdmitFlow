@@ -51,6 +51,9 @@ export const applicationApi = {
 // The fee receipt PDF, opened as a plain link (like the brochure) so no popup blocker gets in the way.
 export const receiptPdfUrl = (applicationId) =>
   `${apiClient.defaults.baseURL ?? ''}/api/app/receipt/${applicationId}/pdf`
+// The application PDF: the server redirects to a short-lived signed link, so this is a plain link too.
+export const applicationPdfUrl = (applicationId) =>
+  `${apiClient.defaults.baseURL ?? ''}/api/app/application-pdf/${applicationId}`
 
 // Site content (v1.1 FR-12): loaded once at start-up by ContentContext; edited at /admin/content.
 export const contentApi = {

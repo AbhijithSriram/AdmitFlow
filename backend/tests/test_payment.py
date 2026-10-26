@@ -233,6 +233,31 @@ def test_receipt_not_available_before_a_pdf_exists(client, make_student):
     assert client.get(f"/api/app/receipt/{_application_of(student).id}").status_code == 404
 
 
+def test_the_application_pdf_link_redirects_its_owner_to_a_presigned_url(client, make_student, fake_minio):
+    owner = make_student(status="PAID", files=True)
+    application = _application_of(owner)
+    _login_as(client, owner)
+    resp = client.get(f"/api/app/application-pdf/{application.id}")
+    assert resp.status_code == 302 and resp.headers["Location"].startswith("http://minio.test/")
+
+    _login_as(client, make_student(status="PAID", files=True))
+    assert client.get(f"/api/app/application-pdf/{application.id}").status_code == 404
+
+
+@pytest.mark.parametrize("bad_id", ["not-a-uuid", "x'or'1'='1"])
+def test_the_application_pdf_link_is_a_json_404_without_a_pdf_or_with_a_bad_id(client, make_student, bad_id):
+    student = make_student(status="IN_PROGRESS", files=False)
+    _login_as(client, student)
+    for app_id in (_application_of(student).id, bad_id):
+        resp = client.get(f"/api/app/application-pdf/{app_id}")
+        assert resp.status_code == 404 and resp.get_json()["success"] is False
+
+
+def test_the_application_pdf_link_needs_a_login(client, make_student):
+    student = make_student(status="PAID", files=True)
+    assert client.get(f"/api/app/application-pdf/{_application_of(student).id}").status_code == 401
+
+
 # ------------------------------------------------- PDF content and edit lock
 def test_form_data_is_grouped_by_step_so_repeated_field_names_survive(client, make_student):
     from app.blueprints.payment import _collect_form_data
