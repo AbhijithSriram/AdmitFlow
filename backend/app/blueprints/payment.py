@@ -8,6 +8,7 @@ from app.extensions import db
 from app.middleware.auth_guard import login_required
 from app.models import Application, FormDraft, Payment, Student
 from app.services import content_service, email_service, form_fields, minio_service, payment_service, pdf_service
+from app.services.admin_service import is_uuid
 
 log = logging.getLogger(__name__)
 payment_bp = Blueprint("payment", __name__)
@@ -228,7 +229,7 @@ def get_receipt(application_id):
     student_id = session["student_id"]
     # Scoped to the logged-in student's own id, not just the application id in the
     # URL, so one student can't read another's receipt by guessing a UUID.
-    application = Application.query.filter_by(id=application_id, student_id=student_id).first()
+    application = _own_application(application_id, student_id)
 
     if application is None:
         return jsonify({"success": False, "error": "Application not found"}), 404
@@ -237,6 +238,51 @@ def get_receipt(application_id):
 
     url = minio_service.get_presigned_url(application.pdf_url)
     return jsonify({"success": True, "data": {"url": url}})
+
+
+@payment_bp.route("/app/receipt/<application_id>/pdf", methods=["GET"])
+@login_required
+def get_fee_receipt_pdf(application_id):
+    """The fee receipt (amount, payment and order ids), built from the successful payment each time
+    it is asked for, so every paid applicant has one and nothing extra is stored. A plain link opens
+    it: no popup, and the session cookie scopes it to its owner."""
+    application = _own_application(application_id, session["student_id"])
+    payment = None
+    if application is not None:
+        payment = (Payment.query.filter_by(application_id=application.id, status="SUCCESS")
+                   .order_by(Payment.created_at.desc()).first())
+    if payment is None:
+        return jsonify({"success": False, "error": "Receipt not available yet"}), 404
+
+    student = db.session.get(Student, application.student_id)
+    pdf = pdf_service.render_receipt_pdf(_receipt_context(student, application, payment, payment.created_at))
+    response = make_response(pdf)
+    response.headers["Content-Type"] = "application/pdf"
+    response.headers["Content-Disposition"] = 'inline; filename="admitflow-fee-receipt.pdf"'
+    return response
+
+
+def _own_application(application_id, student_id):
+    """The signed-in student's application with this id, or None. A malformed id is just "not
+    found": passed to PostgreSQL it would fail the uuid cast and surface as a 500."""
+    if not is_uuid(application_id):
+        return None
+    return Application.query.filter_by(id=application_id, student_id=student_id).first()
+
+
+def _receipt_context(student: Student, application: Application, payment: Payment, paid_on: datetime) -> dict:
+    return {
+        "institution_name": content_service.institution_name(),
+        "demo_footer": content_service.demo_footer(),
+        "full_name": student.full_name,
+        "programme": application.programme,
+        "amount": payment.amount,
+        "payment_id": payment.razorpay_payment_id,
+        "order_id": payment.razorpay_order_id,
+        "paid_on": paid_on.strftime("%d %b %Y, %H:%M UTC"),
+        # Razorpay test keys start rzp_test_: the receipt then says no real money was charged.
+        "test_mode": str(current_app.config.get("RAZORPAY_KEY_ID") or "").startswith("rzp_test_"),
+    }
 
 
 def _generate_and_deliver_confirmation(student: Student, application: Application, payment: Payment) -> None:
@@ -273,19 +319,7 @@ def _generate_and_deliver_confirmation(student: Student, application: Applicatio
         db.session.commit()
 
         receipt_bytes = pdf_service.render_receipt_pdf(
-            {
-                "institution_name": content_service.institution_name(),
-                "demo_footer": content_service.demo_footer(),
-                "full_name": student.full_name,
-                "programme": application.programme,
-                "amount": payment.amount,
-                "payment_id": payment.razorpay_payment_id,
-                "order_id": payment.razorpay_order_id,
-                "paid_on": datetime.utcnow().strftime("%d %b %Y, %H:%M UTC"),
-                # Razorpay test keys start rzp_test_: the receipt then says no real money was charged.
-                "test_mode": str(current_app.config.get("RAZORPAY_KEY_ID") or "").startswith("rzp_test_"),
-            }
-        )
+            _receipt_context(student, application, payment, datetime.utcnow()))
 
         email_service.send_payment_confirmation_email(
             student.email,

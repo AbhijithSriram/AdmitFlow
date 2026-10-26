@@ -98,6 +98,18 @@ def test_list_shows_counts(logged_in, paid):
     logged_in.post(f"{URL}/{pid}/assign")
     t = logged_in.get(URL).json["data"]["tests"][0]
     assert (t["id"], t["question_count"], t["assigned"], t["submitted"], t["is_published"]) == (pid, 3, 2, 0, True)
+    assert t["started"] == 0
+
+
+def test_list_counts_started_attempts_so_the_page_knows_when_delete_is_allowed(logged_in, paid):
+    pid = make_paper(logged_in, publish=True)
+    paid("One"); paid("Two"); paid("Three")
+    logged_in.post(f"{URL}/{pid}/assign")
+    first, second, _ = TestSubmission.query.all()
+    first.started_at = datetime.utcnow()
+    _submit(second, 1)
+    t = logged_in.get(URL).json["data"]["tests"][0]
+    assert (t["assigned"], t["started"], t["submitted"]) == (3, 2, 1)
 
 
 def test_unknown_and_malformed_ids_are_404(logged_in):
@@ -139,12 +151,42 @@ def test_delete_unused_paper_removes_its_questions(logged_in):
     assert TestPaper.query.count() == 0 and TestQuestion.query.count() == 0
 
 
-def test_delete_with_submissions_is_a_clear_409_not_a_database_error(logged_in, paid):
+def test_delete_of_an_assigned_paper_nobody_started_removes_the_assignments(logged_in, paid, admin):
+    """A test assigned by mistake (or with a typo) must not be stuck on students' dashboards forever."""
+    pid = make_paper(logged_in, publish=True)
+    paid("A"); paid("B")
+    logged_in.post(f"{URL}/{pid}/assign")
+    r = logged_in.delete(f"{URL}/{pid}")
+    assert r.status_code == 200 and r.json["data"] == {"deleted": True}
+    assert TestPaper.query.count() == 0 and TestSubmission.query.count() == 0
+    row = AuditLog.query.filter_by(action_type="TEST_DELETED").one()
+    assert row.admin_id == admin.id and row.details["paper_id"] == pid and row.details["assignments_removed"] == 2
+
+
+@pytest.mark.parametrize("submitted", [False, True])
+def test_delete_once_anyone_started_is_a_clear_409(logged_in, paid, submitted):
+    pid = make_paper(logged_in, publish=True)
+    paid("A"); paid("B")
+    logged_in.post(f"{URL}/{pid}/assign")
+    sub = TestSubmission.query.first()
+    if submitted:
+        _submit(sub, 2)
+    else:
+        sub.started_at = datetime.utcnow()
+        db.session.commit()
+    r = logged_in.delete(f"{URL}/{pid}")
+    assert r.status_code == 409 and "started" in r.json["error"]
+    assert TestPaper.query.count() == 1 and TestSubmission.query.count() == 2
+
+
+def test_delete_is_not_applied_when_the_audit_entry_cannot_be_written(logged_in, paid):
     pid = make_paper(logged_in, publish=True)
     paid()
     logged_in.post(f"{URL}/{pid}/assign")
-    r = logged_in.delete(f"{URL}/{pid}")
-    assert r.status_code == 409 and "assigned" in r.json["error"]
+    with _audit_down():
+        r = logged_in.delete(f"{URL}/{pid}")
+    assert r.status_code == 500 and "nothing was changed" in r.json["error"]
+    db.session.expire_all()
     assert TestPaper.query.count() == 1 and TestSubmission.query.count() == 1
 
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BROCHURE_URL, applicationApi, studentApi } from '../api/client'
+import { BROCHURE_URL, receiptPdfUrl, studentApi } from '../api/client'
 import AppHeader from '../components/AppHeader'
 import StatusBadge from '../components/StatusBadge'
 import TestsCard from '../components/TestsCard'
@@ -11,7 +11,6 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const [receiptError, setReceiptError] = useState(null)
   const [retryMessage, setRetryMessage] = useState(null)
   const { status: paymentStatus, pay } = usePayment()
 
@@ -38,16 +37,6 @@ export default function Dashboard() {
       setRetryMessage({ ok: false, text: 'The payment was not completed. You can try again.' })
     }
     await loadDashboard()
-  }
-
-  const handleViewReceipt = async () => {
-    setReceiptError(null)
-    try {
-      const { data: receipt } = await applicationApi.getReceipt(data.application_id)
-      window.open(receipt.data.url, '_blank', 'noopener')
-    } catch {
-      setReceiptError('Could not load your receipt. Try again in a moment.')
-    }
   }
 
   if (loading) {
@@ -95,16 +84,15 @@ export default function Dashboard() {
             </Link>
           )}
           {data?.has_receipt && (
-            <button type="button" onClick={handleViewReceipt} className="px-4 py-2 rounded border">
+            <a href={receiptPdfUrl(data.application_id)} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded border">
               View Receipt
-            </button>
+            </a>
           )}
           <a href={BROCHURE_URL} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded border">
             Download Brochure
           </a>
         </div>
 
-        {receiptError && <p className="text-red-600 text-sm mt-2">{receiptError}</p>}
         {retryMessage && (
           <p className={`text-sm mt-2 ${retryMessage.ok ? 'text-green-700' : 'text-red-600'}`} role="status">
             {retryMessage.text}

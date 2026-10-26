@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { studentTestsApi } from '../api/client'
+import { listErrorMessage } from './testsMessages'
 
 // Dashboard card listing the applicant's assigned aptitude tests (SRD FR-10). Owner: Person 1.
 // Person 3 mounts <TestsCard /> in Dashboard.jsx (for PAID applicants only); this file is ours.
@@ -28,8 +29,8 @@ export function useAssignedTests() {
       .then((response) => {
         if (!cancelled) setTests(response.data.data.tests)
       })
-      .catch(() => {
-        if (!cancelled) setError('Could not load your aptitude tests. Try refreshing.')
+      .catch((err) => {
+        if (!cancelled) setError(listErrorMessage(err.response?.status))
       })
     return () => {
       cancelled = true

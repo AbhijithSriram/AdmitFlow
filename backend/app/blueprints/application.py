@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.extensions import db
 from app.models import Application, FormDraft, Student
 from app.services import content_service, field_rules, minio_service
+from app.services.admin_service import is_uuid
 from app.middleware.auth_guard import login_required
 
 application_bp = Blueprint("application", __name__)
@@ -37,6 +38,14 @@ def make_envelope(success=True, data=None, error=None, code=200):
     else:
         payload["error"] = error or "An error occurred"
     return jsonify(payload), code
+
+
+def _own_application(application_id, student_id):
+    """The signed-in student's application with this id, or None. A malformed id is just "not
+    found": passed to PostgreSQL it would fail the uuid cast and surface as a 500."""
+    if not is_uuid(application_id):
+        return None
+    return Application.query.filter_by(id=application_id, student_id=student_id).first()
 
 
 def _locked_after_payment(app):
@@ -121,7 +130,7 @@ def current_application():
 @login_required
 def get_draft(application_id):
     student_id = session.get("student_id")
-    app = Application.query.filter_by(id=application_id, student_id=student_id).first()
+    app = _own_application(application_id, student_id)
     if not app:
         return make_envelope(success=False, error="Application not found", code=404)
 
@@ -154,7 +163,7 @@ def get_draft(application_id):
 @login_required
 def save_draft_step(application_id, step_number):
     student_id = session.get("student_id")
-    app = Application.query.filter_by(id=application_id, student_id=student_id).first()
+    app = _own_application(application_id, student_id)
     if not app:
         return make_envelope(success=False, error="Application not found", code=404)
 
@@ -226,7 +235,7 @@ def save_draft_step(application_id, step_number):
 @login_required
 def upload_document(application_id, doc_type):
     student_id = session.get("student_id")
-    app = Application.query.filter_by(id=application_id, student_id=student_id).first()
+    app = _own_application(application_id, student_id)
     if not app:
         return make_envelope(success=False, error="Application not found", code=404)
 
