@@ -56,12 +56,19 @@ Then create the tables:
 ```bash
 createdb admitflow
 psql admitflow -f backend/migrations/schema.sql
-psql admitflow -f backend/migrations/002_admin_portal.sql   # admin sessions + append-only audit log
+psql admitflow -f backend/migrations/002_admin_portal.sql            # admin sessions + append-only audit log
+psql admitflow -f backend/migrations/003_otp_attempts.sql            # counts wrong one-time-code guesses
+psql admitflow -f backend/migrations/004_swap_programme_and_academic_steps.sql
+psql admitflow -f backend/migrations/005_aptitude_tests.sql          # aptitude test publishing, marks, scores
+psql admitflow -f backend/migrations/006_seat_matrix.sql             # seats per programme (statistics page)
+psql admitflow -f backend/migrations/007_site_settings.sql           # admin-editable site content
 ```
 
-`schema.sql` already includes everything. **If your database was created before these changes**, run the
-migrations you have not applied yet (each is safe to re-run):
-`002_admin_portal.sql` (admin sessions and audit log), `003_otp_attempts.sql` (counts wrong one-time-code guesses) and `004_swap_programme_and_academic_steps.sql` (moves drafts saved before the programme became Step 3 and the academic details Step 4).
+`schema.sql` is the base schema; the numbered migrations add the rest (the aptitude tests, statistics and site
+content pages fail without 005-007), so apply all of them in order, as `deploy/homeserver/install.sh` does. Each one
+is safe to re-run, so **if your database was created earlier**, run the same list again to pick up the ones you
+have not applied yet. `004_swap_programme_and_academic_steps.sql` moves drafts saved before the programme became
+Step 3 and the academic details Step 4.
 
 ### 3. Backend
 
