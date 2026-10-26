@@ -230,7 +230,11 @@ export default function AdminTests() {
 
   const publish = (t) => act(() => adminTestsApi.publish(t.id), `“${t.title}” is published. You can now assign it.`)
   const remove = (t) =>
-    window.confirm(`Delete “${t.title}” and its questions? This cannot be undone.`) &&
+    window.confirm(
+      t.assigned > 0
+        ? `Delete “${t.title}”? It is removed from the ${t.assigned} applicant${t.assigned === 1 ? '' : 's'} it was assigned to (nobody has started it). This cannot be undone.`
+        : `Delete “${t.title}” and its questions? This cannot be undone.`,
+    ) &&
     act(() => adminTestsApi.remove(t.id), `“${t.title}” was deleted.`)
 
   return (
@@ -285,7 +289,7 @@ export default function AdminTests() {
                     {!t.is_published && <button onClick={() => publish(t)} className={btn}>Publish</button>}
                     {t.is_published && <button onClick={() => setAssigning(t)} className={btn}>Assign</button>}
                     {t.assigned > 0 && <button onClick={() => setViewing(t)} className={btn}>Results</button>}
-                    <button onClick={() => remove(t)} disabled={t.assigned > 0} title={t.assigned > 0 ? 'Applicants are assigned, so this test cannot be deleted' : ''}
+                    <button onClick={() => remove(t)} disabled={t.started > 0} title={t.started > 0 ? 'Someone has started this test, so it cannot be deleted' : ''}
                       className="text-sm border border-red-300 text-red-700 rounded-md px-2 py-1 hover:bg-red-50 disabled:opacity-40">
                       Delete
                     </button>
