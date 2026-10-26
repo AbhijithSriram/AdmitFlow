@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { studentTestsApi } from '../api/client'
 import AppHeader from '../components/AppHeader'
+import { NOT_PAID } from '../components/testsMessages'
 
 // SRD FR-10: the timed test page. Owner: Person 1.
 // The server owns the timer: start returns seconds_left, and the countdown runs from it on
@@ -23,7 +24,7 @@ const formatClock = (seconds) => {
 const formatTime = (iso) => new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
 
 const START_ERRORS = {
-  403: 'Aptitude tests are available once your application fee has been paid.',
+  403: NOT_PAID,
   404: 'This test was not found, or it is not assigned to you.',
 }
 
